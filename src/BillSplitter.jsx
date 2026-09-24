@@ -97,6 +97,20 @@ const ResetButton = ({ onReset, hasData }) => (
   <ConfirmButton label="↺ Reset" prompt="Delete progress?" onConfirm={onReset} needsConfirm={hasData} />
 );
 
+// Home page selling points; icons are 24x24 stroke paths
+const FEATURES = [
+  { title: "Works offline", text: "Everything except photo scanning works with no internet.",
+    icon: <><path d="M2 2l20 20" /><path d="M8.5 16.5a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 5.2-2.8M19 12.9a10 10 0 0 0-2.3-1.6M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8a15 15 0 0 0-11.9-3.8" /><path d="M12 20h.01" /></> },
+  { title: "No account, no setup", text: "Nothing to sign up for. Open the app and start.",
+    icon: <><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0 1 12 0v1" /><path d="M17 11l4 4M21 11l-4 4" /></> },
+  { title: "Enter the bill, get the split", text: "Items split by who had them, taxes shared equally.",
+    icon: <><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" /><path d="M9 7h6M9 11h6M9 15h3" /></> },
+  { title: "Share payment details", text: "Send each person their share with a UPI pay link.",
+    icon: <><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></> },
+  { title: "Private by default", text: "Your bills and history stay on this device.",
+    icon: <><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></> }
+];
+
 // Top navigation row shown on every screen: Back on the left, Reset on the right
 function TopBar({ onBack, onReset, hasData }) {
   return (
@@ -329,38 +343,51 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   // Landing: pick mode
   const scanDefault = !!apiConfig && online;
   const optionStyle = (primary) => ({
-    display: "flex", alignItems: "center", gap: 14, borderRadius: 14, padding: "16px 18px",
-    cursor: "pointer", textAlign: "left", width: "100%",
+    flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, borderRadius: 14, padding: "12px 8px",
+    cursor: "pointer", textAlign: "center", minWidth: 0,
     border: `1.5px solid ${primary ? "var(--accent)" : "var(--border)"}`, background: primary ? "var(--accent-soft)" : "var(--surface)"
   });
 
   if (!mode) return (
     <div className="fill">
-      <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)", marginBottom: 6 }}>How do you want to add the bill?</div>
-      <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20 }}>Scan a photo or enter items manually</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <button onClick={() => { setMode("upload"); setError(""); }} style={optionStyle(scanDefault)}>
-          <div style={{ fontSize: 32 }}>🧾</div>
-          <div>
-            <div style={{ fontWeight: 700, color: scanDefault ? "var(--accent)" : "var(--text)", fontSize: 14 }}>Scan bill photo</div>
-            <div style={{ fontSize: 12, color: scanDefault ? "var(--accent-muted)" : "var(--subtle)", marginTop: 2 }}>
-              {!online ? "Needs internet. You're offline right now."
-                : apiConfig ? `AI reads the items using ${PROVIDERS[apiConfig.provider].label}`
-                : "AI reads the items using your own Gemini, Claude or OpenAI key"}
+      <div style={{ fontWeight: 800, fontSize: 24, color: "var(--text)", lineHeight: 1.2 }}>Split any bill in seconds</div>
+      <div className="home-sub" style={{ color: "var(--muted)", fontSize: 14, marginTop: 6 }}>Enter what everyone had and see who owes what.</div>
+      <div className="home-features" style={{ display: "flex", flexDirection: "column" }}>
+        {FEATURES.map(f => (
+          <div key={f.title} style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: "var(--accent-soft)", color: "var(--accent)",
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{f.icon}</svg>
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{f.title}</div>
+              <div className="home-feature-text" style={{ fontSize: 13, color: "var(--muted)", marginTop: 1, lineHeight: 1.4 }}>{f.text}</div>
             </div>
           </div>
-        </button>
-        <button onClick={() => setMode("manual")} style={optionStyle(!scanDefault)}>
-          <div style={{ fontSize: 32 }}>✏️</div>
-          <div>
-            <div style={{ fontWeight: 700, color: scanDefault ? "var(--text)" : "var(--accent)", fontSize: 14 }}>Enter manually</div>
-            <div style={{ fontSize: 12, color: scanDefault ? "var(--subtle)" : "var(--accent-muted)", marginTop: 2 }}>Type in items, amounts and charges yourself. Works offline.</div>
-          </div>
-        </button>
+        ))}
       </div>
-      <div style={{ marginTop: "auto", paddingTop: 24 }}>
+      <div className="home-install">
         <InstallBanner />
       </div>
+
+      <StickyFooter bleed>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => { setMode("upload"); setError(""); }} style={optionStyle(scanDefault)}>
+            <span style={{ fontSize: 24 }}>🧾</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: scanDefault ? "var(--accent)" : "var(--text)" }}>Scan bill</span>
+            <span style={{ fontSize: 11, color: scanDefault ? "var(--accent-muted)" : "var(--subtle)" }}>
+              {!online ? "Needs internet" : apiConfig ? `With ${PROVIDERS[apiConfig.provider].label}` : "Uses your AI key"}
+            </span>
+          </button>
+          <button onClick={() => setMode("manual")} style={optionStyle(!scanDefault)}>
+            <span style={{ fontSize: 24 }}>✏️</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: scanDefault ? "var(--text)" : "var(--accent)" }}>Enter manually</span>
+            <span style={{ fontSize: 11, color: scanDefault ? "var(--subtle)" : "var(--accent-muted)" }}>Works offline</span>
+          </button>
+        </div>
+      </StickyFooter>
     </div>
   );
 
