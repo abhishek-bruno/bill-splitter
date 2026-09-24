@@ -1,0 +1,9 @@
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; background: #f3f4f6; -webkit-text-size-adjust: 100%; }
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+button, input, select { font: inherit; }
+/* 16px inputs stop iOS Safari from zooming on focus */
+input, select { font-size: 16px !important; }
+button { -webkit-tap-highlight-color: transparent; }
+/* keep focused fields clear of the sticky bottom button when the browser scrolls them into view */
+html { scroll-padding-bottom: 96px; }
