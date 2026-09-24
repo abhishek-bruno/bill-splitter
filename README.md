@@ -31,3 +31,7 @@ Open https://abhishek-bruno.github.io/bill-splitter/ once while online, then:
 - iOS Safari: Share > Add to Home Screen
 
 After the first load it works with no connection.
+
+## Credits
+
+Pizza icon from [Noto Emoji](https://github.com/googlefonts/noto-emoji) by Google, licensed under the Apache License 2.0.
