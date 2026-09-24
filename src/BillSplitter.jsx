@@ -1316,7 +1316,7 @@ export default function BillSplitter() {
           borderBottom: `1px solid ${scrolled ? "var(--divider)" : "transparent"}`
         }}>
           <div style={{ fontWeight: 800, fontSize: 20, color: "var(--text)", marginBottom: view === "split" ? 14 : 0, display: "flex", alignItems: "center", gap: 8, minHeight: 34 }}>
-            <span>🍕</span> SplitEasy
+            <img src="logo.svg" alt="" width="30" height="30" style={{ borderRadius: 8, flexShrink: 0 }} /> SplitEasy
             {view === "split" && (
               <div style={{ marginLeft: "auto", display: "flex", gap: 2 }}>
                 <HeaderIcon label="History" onClick={() => { setOpenEntryId(null); setView("history"); }}>
