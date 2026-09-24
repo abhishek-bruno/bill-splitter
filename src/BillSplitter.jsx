@@ -1005,6 +1005,11 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
         <div style={{ fontSize: 13, color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>✓ {notice}</div>
       )}
 
+      <div style={sectionTitle}>Install app</div>
+      <div style={{ marginBottom: 24 }}>
+        <InstallBanner permanent />
+      </div>
+
       <div style={sectionTitle}>Appearance</div>
       <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
         {[["system", "System"], ["light", "Light"], ["dark", "Dark"]].map(([id, label]) => (

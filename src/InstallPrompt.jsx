@@ -26,8 +26,9 @@ const ShareIcon = () => (
   </svg>
 );
 
-// Install banner: one-tap install where the browser supports it, Add to Home Screen steps on iOS
-export default function InstallBanner() {
+// Install banner: one-tap install where the browser supports it, Add to Home Screen steps on iOS.
+// On the home page it can be dismissed; in Settings (permanent) it always shows.
+export default function InstallBanner({ permanent = false }) {
   const [, rerender] = useState(0);
   const [dismissed, setDismissed] = useState(recentlyDismissed);
 
@@ -37,9 +38,13 @@ export default function InstallBanner() {
     return () => listeners.delete(fn);
   }, []);
 
-  if (dismissed || isStandalone()) return null;
   const ios = isIOS();
-  if (!deferredPrompt && !ios) return null;
+  if (permanent && isStandalone()) return (
+    <div style={{ fontSize: 14, color: "var(--muted)" }}>✓ SplitEasy is installed on this device.</div>
+  );
+  if (isStandalone() || (!permanent && dismissed)) return null;
+  // Browsers without a one-tap prompt (Firefox, or Chrome before it offers one) only get the Settings hint
+  if (!deferredPrompt && !ios && !permanent) return null;
 
   const dismiss = () => {
     try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* storage unavailable */ }
@@ -63,15 +68,16 @@ export default function InstallBanner() {
         <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, lineHeight: 1.4 }}>
           {ios
             ? <>Tap <ShareIcon /> Share, then <b>Add to Home Screen</b></>
-            : "Opens like an app and works offline"}
+            : deferredPrompt ? "Opens like an app and works offline"
+            : <>Use your browser menu and choose <b>Install app</b> or <b>Add to Home screen</b></>}
         </div>
       </div>
-      {!ios && (
+      {deferredPrompt && (
         <button onClick={install} style={{ border: "none", borderRadius: 10, padding: "8px 14px", background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>
           Install
         </button>
       )}
-      <button onClick={dismiss} aria-label="Dismiss" style={{ background: "none", border: "none", color: "var(--subtle)", fontSize: 20, lineHeight: 1, cursor: "pointer", padding: "0 2px", flexShrink: 0 }}>×</button>
+      {!permanent && <button onClick={dismiss} aria-label="Dismiss" style={{ background: "none", border: "none", color: "var(--subtle)", fontSize: 20, lineHeight: 1, cursor: "pointer", padding: "0 2px", flexShrink: 0 }}>×</button>}
     </div>
   );
 }
