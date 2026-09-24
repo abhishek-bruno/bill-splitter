@@ -840,7 +840,7 @@ function HistoryList({ history, onOpen, onClose }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: "var(--text)" }}>History</div>
-        <button onClick={onClose} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 700, fontSize: 14 }}>Done</button>
+        <button onClick={onClose} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 700, fontSize: 14 }}>Close</button>
       </div>
       {history.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 14, padding: "32px 0" }}>
@@ -998,7 +998,7 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div style={{ fontWeight: 800, fontSize: 18, color: "var(--text)" }}>Settings</div>
-        <button onClick={onClose} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 700, fontSize: 14 }}>Done</button>
+        <button onClick={onClose} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 700, fontSize: 14 }}>Close</button>
       </div>
 
       {notice && (
