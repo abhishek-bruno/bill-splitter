@@ -80,14 +80,46 @@ export async function prepareImage(file, maxSide = 1600) {
 }
 
 async function httpError(res, provider) {
-  let msg = "";
-  try { const j = await res.json(); msg = j.error?.message || ""; } catch { /* non-JSON body */ }
-  if (res.status === 401 || res.status === 403) return new Error(`${PROVIDERS[provider].label} rejected the API key. Check it in settings.`);
+  let msg = "", reason = "";
+  try {
+    const body = await res.json();
+    const err = (Array.isArray(body) ? body[0] : body)?.error; // Google sometimes wraps errors in an array
+    msg = err?.message || "";
+    reason = err?.details?.find(d => d.reason)?.reason || "";
+  } catch { /* non-JSON body */ }
+  if (res.status === 401 || res.status === 403 || reason === "API_KEY_INVALID") return new Error(`${PROVIDERS[provider].label} rejected the API key. Check it in settings.`);
   if (res.status === 429) return new Error(`${PROVIDERS[provider].label} rate limit or quota reached. Try again later.`);
   return new Error(msg || `${PROVIDERS[provider].label} request failed (${res.status}).`);
 }
 
-async function callGoogle({ apiKey, model }, img) {
+// Gemini's schema support is a subset of JSON Schema; drop the fields it may reject
+const geminiSchema = (schema) => JSON.parse(JSON.stringify(schema, (k, v) => k === "additionalProperties" ? undefined : v));
+
+// Interactions API: https://ai.google.dev/gemini-api/docs/interactions-overview
+async function callGoogle(config, img) {
+  const { apiKey, model } = config;
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    body: JSON.stringify({
+      model,
+      input: [
+        { type: "text", text: PROMPT },
+        { type: "image", data: img.base64, mime_type: img.mediaType }
+      ],
+      response_format: { type: "text", mime_type: "application/json", schema: geminiSchema(SCHEMA) }
+    })
+  });
+  // Older models or regions without the Interactions API: fall back to generateContent
+  if (res.status === 404) return callGoogleGenerateContent(config, img);
+  if (!res.ok) throw await httpError(res, "google");
+  const data = await res.json();
+  const it = data.interaction ?? data;
+  return it.output_text ?? it.outputText
+    ?? (it.outputs || []).filter(o => o.type === "text").map(o => o.text).join("");
+}
+
+async function callGoogleGenerateContent({ apiKey, model }, img) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },

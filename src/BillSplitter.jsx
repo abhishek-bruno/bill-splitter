@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { PROVIDERS, parseBillImage, upgradeModel } from "./vision.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
+import CameraCapture, { cameraSupported } from "./CameraCapture.jsx";
 import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy } from "./payment.js";
 
 const COLORS = [
@@ -218,6 +219,7 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
   const [scanned, setScanned] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const cameraRef = useRef();
   const galleryRef = useRef();
 
@@ -384,7 +386,7 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
               {!preview && <div style={{ fontSize: 40 }}>🧾</div>}
               {!preview && <div style={{ fontWeight: 700, fontSize: 16, color: "#111" }}>Add a photo of the bill</div>}
               <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 320 }}>
-                <button onClick={() => cameraRef.current.click()} disabled={!online} style={{
+                <button onClick={() => cameraSupported() ? setCameraOpen(true) : cameraRef.current.click()} disabled={!online} style={{
                   flex: 1, border: "none", borderRadius: 10, padding: "11px 8px", fontWeight: 700, fontSize: 14,
                   background: online ? "#6366f1" : "#e5e7eb", color: online ? "#fff" : "#9ca3af", cursor: online ? "pointer" : "default"
                 }}>📷 {preview ? "Retake" : "Camera"}</button>
@@ -405,6 +407,13 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
             {error}
             <button onClick={() => { setMode("manual"); setError(""); }} style={{ marginLeft: 8, color: "#6366f1", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>Enter manually →</button>
           </div>
+        )}
+        {cameraOpen && (
+          <CameraCapture
+            onCapture={file => { setCameraOpen(false); handleFile(file); }}
+            onClose={() => setCameraOpen(false)}
+            onFallback={() => { setCameraOpen(false); cameraRef.current.click(); }}
+          />
         )}
         <style>{`@keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-6px); } }`}</style>
       </div>
