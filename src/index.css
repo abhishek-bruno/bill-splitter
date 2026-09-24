@@ -1,30 +1,67 @@
+/* Colour tokens: light by default, dark when the system asks for it (unless the user picked light),
+   or when the user explicitly picked dark in Settings */
+:root {
+  color-scheme: light;
+  --page: #f3f4f6; --surface: #fff; --surface-2: #f9fafb; --divider: #f3f4f6;
+  --text: #111; --text-2: #374151; --muted: #6b7280; --subtle: #9ca3af;
+  --border: #e5e7eb; --border-strong: #d1d5db;
+  --accent: #6366f1; --accent-soft: #f0f0ff; --accent-muted: #818cf8;
+  --success: #10b981; --success-soft: #ecfdf5; --success-border: #a7f3d0; --success-text: #059669;
+  --danger: #ef4444; --danger-soft: #fef2f2; --danger-border: #fecaca;
+  --warn-soft: #fffbeb; --warn-border: #fde68a; --warn-text: #92400e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0b0d12; --surface: #15181f; --surface-2: #1c2029; --divider: #232733;
+    --text: #f3f4f6; --text-2: #d1d5db; --muted: #9ca3af; --subtle: #6b7280;
+    --border: #2a2f3a; --border-strong: #3a4050;
+    --accent: #7174f5; --accent-soft: #23264a; --accent-muted: #a5b4fc;
+    --success: #10b981; --success-soft: #0f2a22; --success-border: #1f5c47; --success-text: #34d399;
+    --danger: #f05252; --danger-soft: #2a1416; --danger-border: #5c2a2e;
+    --warn-soft: #2a2210; --warn-border: #5c4a1a; --warn-text: #fbbf24;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0b0d12; --surface: #15181f; --surface-2: #1c2029; --divider: #232733;
+  --text: #f3f4f6; --text-2: #d1d5db; --muted: #9ca3af; --subtle: #6b7280;
+  --border: #2a2f3a; --border-strong: #3a4050;
+  --accent: #7174f5; --accent-soft: #23264a; --accent-muted: #a5b4fc;
+  --success: #10b981; --success-soft: #0f2a22; --success-border: #1f5c47; --success-text: #34d399;
+  --danger: #f05252; --danger-soft: #2a1416; --danger-border: #5c2a2e;
+  --warn-soft: #2a2210; --warn-border: #5c4a1a; --warn-text: #fbbf24;
+}
+
 *, *::before, *::after { box-sizing: border-box; }
-html, body { margin: 0; background: #fff; -webkit-text-size-adjust: 100%; }
-/* the sticky footer handles the bottom inset itself */
-body { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+html, body { margin: 0; background: var(--surface); color: var(--text); -webkit-text-size-adjust: 100%; }
+/* the sticky header and footer handle the top and bottom insets themselves */
+body { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
 button, input, select { font: inherit; }
 /* 16px inputs stop iOS Safari from zooming on focus */
 input, select { font-size: 16px !important; }
+input::placeholder { color: var(--subtle); }
 button { -webkit-tap-highlight-color: transparent; }
-/* keep focused fields clear of the sticky bottom button when the browser scrolls them into view */
-html { scroll-padding-bottom: 96px; }
+/* keep focused fields clear of the sticky header and bottom button when scrolled into view */
+html { scroll-padding-top: 150px; scroll-padding-bottom: 96px; }
 
 /* Phones: the app fills the screen edge to edge, so the bottom button sits at the bottom of the screen */
 .app-shell { display: flex; justify-content: center; }
 .app-card {
-  width: 100%; max-width: 480px; background: #fff;
+  width: 100%; max-width: 480px; background: var(--surface);
   display: flex; flex-direction: column;
-  min-height: calc(100vh - env(safe-area-inset-top));
-  min-height: calc(100dvh - env(safe-area-inset-top));
+  min-height: 100vh; min-height: 100dvh;
 }
 /* stretches down the tree so the footer can be pushed to the bottom on short pages */
 .fill { flex: 1; display: flex; flex-direction: column; }
+.sticky-header { position: sticky; top: 0; z-index: 2; background: var(--surface); }
 .sticky-footer { position: sticky; bottom: 0; margin-top: auto; }
 
 /* Wider screens: a centered card on a grey background */
 @media (min-width: 560px) {
-  html, body { background: #f3f4f6; }
+  html, body { background: var(--page); }
   .app-shell { padding: 24px 16px; }
   .app-card { border-radius: 20px; box-shadow: 0 4px 32px #0001; min-height: calc(100vh - 48px); min-height: calc(100dvh - 48px); }
+  .sticky-header { border-radius: 20px 20px 0 0; }
   .sticky-footer { border-radius: 0 0 20px 20px; }
 }
