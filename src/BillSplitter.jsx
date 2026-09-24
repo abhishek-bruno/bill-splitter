@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { PROVIDERS, parseBillImage } from "./vision.js";
+import { PROVIDERS, parseBillImage, upgradeModel } from "./vision.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
 import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy } from "./payment.js";
 
@@ -131,6 +131,14 @@ const linkBtn = {
   fontSize: 13, padding: 0, display: "flex", alignItems: "center", gap: 4
 };
 
+// Loads the saved vision config, replacing a retired model with its successor and saving that back
+async function loadVisionConfig() {
+  const saved = await loadSecret("vision");
+  const upgraded = upgradeModel(saved);
+  if (upgraded !== saved) await saveSecret("vision", upgraded);
+  return upgraded;
+}
+
 function ApiKeySettings({ config, onSave, onCancel }) {
   const [provider, setProvider] = useState(config?.provider || "google");
   const [apiKey, setApiKey] = useState(config?.apiKey || "");
@@ -214,7 +222,7 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
   const galleryRef = useRef();
 
   useEffect(() => {
-    loadSecret("vision").then(setApiConfig).catch(() => setApiConfig(null));
+    loadVisionConfig().then(setApiConfig).catch(() => setApiConfig(null));
   }, [keyVersion]);
 
   useEffect(() => {
@@ -921,7 +929,7 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState("");
 
-  useEffect(() => { loadSecret("vision").then(setConfig).catch(() => setConfig(null)); }, []);
+  useEffect(() => { loadVisionConfig().then(setConfig).catch(() => setConfig(null)); }, []);
 
   const flash = (msg) => { setNotice(msg); setTimeout(() => setNotice(""), 2500); };
 
