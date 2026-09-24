@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Pay by UPI</title>
+  <style>
+    :root { --bg: #f3f4f6; --card: #fff; --text: #111; --muted: #6b7280; --accent: #6366f1; --line: #e5e7eb; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #111318; --card: #1c1f26; --text: #f3f4f6; --muted: #9ca3af; --line: #2d313a; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+      background: var(--bg); color: var(--text); font-family: -apple-system, "Inter", system-ui, sans-serif; }
+    .card { width: 100%; max-width: 380px; background: var(--card); border-radius: 20px; padding: 28px 24px; text-align: center;
+      box-shadow: 0 4px 32px #0001; }
+    .label { color: var(--muted); font-size: 14px; }
+    .amount { font-size: 40px; font-weight: 800; margin: 6px 0 4px; }
+    .to { font-size: 15px; margin-bottom: 4px; }
+    .note { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+    .pay { display: block; background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; font-size: 16px;
+      border-radius: 12px; padding: 14px; }
+    .id { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 13px; color: var(--muted); }
+    .id code { display: block; font-size: 15px; color: var(--text); margin: 6px 0 10px; word-break: break-all; }
+    button { font: inherit; background: none; border: 1.5px solid var(--line); color: var(--text); border-radius: 10px; padding: 8px 14px; cursor: pointer; }
+    .error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <main class="card" id="card">
+    <div class="label">Payment request</div>
+    <div class="amount" id="amount"></div>
+    <div class="to" id="to"></div>
+    <div class="note" id="note"></div>
+    <a class="pay" id="pay">Pay with UPI app</a>
+    <div class="id">
+      Or pay manually to this UPI ID
+      <code id="upi"></code>
+      <button id="copy" type="button">Copy UPI ID</button>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var pa = q.get("pa") || "";
+      var pn = q.get("pn") || "";
+      var am = q.get("am") || "";
+      var tn = q.get("tn") || "";
+      var card = document.getElementById("card");
+
+      if (!/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/.test(pa) || !/^\d+(\.\d{1,2})?$/.test(am)) {
+        card.textContent = "";
+        var p = document.createElement("p");
+        p.className = "error";
+        p.textContent = "This payment link is invalid or incomplete.";
+        card.appendChild(p);
+        return;
+      }
+
+      var params = new URLSearchParams({ pa: pa, pn: pn, am: am, cu: "INR" });
+      if (tn) params.set("tn", tn.slice(0, 50));
+
+      document.getElementById("amount").textContent = "₹" + Number(am).toFixed(2);
+      document.getElementById("to").textContent = pn ? "to " + pn : "";
+      document.getElementById("note").textContent = tn;
+      document.getElementById("pay").href = "upi://pay?" + params.toString();
+      document.getElementById("upi").textContent = pa;
+      document.getElementById("copy").addEventListener("click", function (e) {
+        navigator.clipboard.writeText(pa).then(function () { e.target.textContent = "Copied"; });
+      });
+    })();
+  </script>
+</body>
+</html>
