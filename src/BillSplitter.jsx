@@ -249,11 +249,18 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
     setEditingKey(false);
   };
 
-  const handleFile = async (file) => {
+  const [lastFile, setLastFile] = useState(null); // kept so a failed scan can be retried without retaking the photo
+
+  const handleFile = (file) => {
     if (!file) return;
-    if (!file.type?.startsWith("image/")) { setError("Please choose an image file."); return; }
-    setError("");
+    if (!file.type?.startsWith("image/")) { setError("Please choose an image file."); setLastFile(null); return; }
     setPreview(URL.createObjectURL(file));
+    setLastFile(file);
+    scanFile(file);
+  };
+
+  const scanFile = async (file) => {
+    setError("");
     setLoading(true);
     try {
       const bill = await parseBillImage(file, apiConfig);
@@ -403,9 +410,14 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
           <button onClick={() => setEditingKey(true)} disabled={loading} style={{ ...linkBtn, color: "#6366f1", fontWeight: 600 }}>Change</button>
         </div>
         {error && (
-          <div style={{ marginTop: 12, color: "#ef4444", fontSize: 13, background: "#fef2f2", borderRadius: 8, padding: "8px 14px" }}>
-            {error}
-            <button onClick={() => { setMode("manual"); setError(""); }} style={{ marginLeft: 8, color: "#6366f1", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>Enter manually →</button>
+          <div style={{ marginTop: 12, color: "#ef4444", fontSize: 13, background: "#fef2f2", borderRadius: 8, padding: "10px 14px" }}>
+            <div>{error}</div>
+            <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+              {lastFile && (
+                <button onClick={() => scanFile(lastFile)} disabled={!online} style={{ color: online ? "#6366f1" : "#9ca3af", background: "none", border: "none", cursor: online ? "pointer" : "default", fontWeight: 700, fontSize: 13, padding: 0 }}>↻ Retry</button>
+              )}
+              <button onClick={() => { setMode("manual"); setError(""); }} style={{ color: "#6366f1", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>Enter manually →</button>
+            </div>
           </div>
         )}
         {cameraOpen && (
