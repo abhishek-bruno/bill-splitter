@@ -386,7 +386,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
             <span style={{ fontSize: 28 }}>✏️</span>
             <span>
               <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: scanDefault ? "var(--text)" : "var(--accent)" }}>Enter manually</span>
-              <span style={{ display: "block", fontSize: 12, color: scanDefault ? "var(--subtle)" : "var(--accent-muted)", marginTop: 2 }}>Type in items and charges yourself. Works offline.</span>
+              <span style={{ display: "block", fontSize: 12, color: scanDefault ? "var(--subtle)" : "var(--accent-muted)", marginTop: 2 }}>Type in items and charges yourself.</span>
             </span>
           </button>
         </div>
