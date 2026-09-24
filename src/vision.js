@@ -23,6 +23,11 @@ export const PROVIDERS = {
   }
 };
 
+// Pasted keys often carry invisible characters (zero-width or non-breaking spaces, BOMs) that
+// browsers refuse to put in a request header. Strip them; anything left must be printable ASCII.
+export const cleanApiKey = (key) => (key || "").replace(/[\s\u00A0\u200B-\u200D\u2060\uFEFF]/g, "");
+export const isValidApiKey = (key) => /^[\x21-\x7E]+$/.test(key);
+
 // Models the providers have retired, mapped to their replacement. Saved configs are upgraded on load.
 export const RETIRED_MODELS = {
   "gemini-2.5-flash": "gemini-flash-latest"
@@ -209,7 +214,9 @@ function normalize(raw) {
 export async function parseBillImage(file, config) {
   if (!navigator.onLine) throw new Error("You're offline. Scanning needs internet; enter the bill manually instead.");
   const img = await prepareImage(file);
-  const text = await CALLERS[config.provider](upgradeModel(config), img);
+  const apiKey = cleanApiKey(config.apiKey);
+  if (!isValidApiKey(apiKey)) throw new Error("The saved API key contains characters that aren't allowed. Paste it again in settings.");
+  const text = await CALLERS[config.provider]({ ...upgradeModel(config), apiKey }, img);
   let raw;
   try {
     raw = JSON.parse(text.replace(/```json|```/g, "").trim());
