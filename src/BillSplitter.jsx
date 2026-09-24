@@ -212,8 +212,7 @@ function ApiKeySettings({ config, onSave, onCancel }) {
   );
 }
 
-function BillStep({ initial, onDone, onReset, keyVersion }) {
-  const [mode, setMode] = useState(initial ? "manual" : null); // null | "upload" | "manual"
+function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack }) {
   const [error, setError] = useState("");
   const [restaurant, setRestaurant] = useState(initial?.restaurant === "My Bill" ? "" : initial?.restaurant || "");
   const [currency, setCurrency] = useState(initial?.currency || "₹");
@@ -318,7 +317,13 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
   };
 
   const formHasData = !!restaurant.trim() || [...items, ...taxes].some(x => x.name.trim() || String(x.amount).trim());
-  const goLanding = () => { setMode(null); setError(""); setPreview(null); setEditingKey(false); };
+  // Mode changes can come from the browser back button, so reset per-screen state here
+  useEffect(() => {
+    setError(""); setEditingKey(false);
+    if (mode !== "upload") setPreview(null);
+  }, [mode]);
+
+  const goLanding = onBack;
   const topBar = <TopBar onBack={goLanding} onReset={onReset} hasData={formHasData} />;
 
   // Landing: pick mode
@@ -365,7 +370,7 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
     if (!apiConfig || editingKey) return (
       <div>
         {topBar}
-        <ApiKeySettings config={apiConfig} onSave={saveConfig} onCancel={() => apiConfig ? setEditingKey(false) : setMode(null)} />
+        <ApiKeySettings config={apiConfig} onSave={saveConfig} onCancel={() => apiConfig ? setEditingKey(false) : goLanding()} />
         {apiConfig && (
           <button onClick={removeConfig} style={{ ...linkBtn, color: "#ef4444", margin: "16px auto 0" }}>Remove saved key</button>
         )}
@@ -1113,6 +1118,28 @@ const HeaderIcon = ({ label, onClick, children }) => (
   </button>
 );
 
+// ── Routing ───────────────────────────────────────────────────────────────────
+// Hash routes so the browser/Android back button steps back through screens instead of leaving
+// the app. Hashes need no server config on GitHub Pages and don't disturb the service worker.
+const STEP_ROUTES = ["", "people", "assign", "summary"];
+
+function routeFor({ view, openEntryId, step, billMode }) {
+  if (view === "settings") return "#/settings";
+  if (view === "history") return openEntryId ? `#/history/${openEntryId}` : "#/history";
+  if (step === 0) return billMode === "manual" ? "#/bill/manual" : billMode === "upload" ? "#/bill/scan" : "#/";
+  return `#/${STEP_ROUTES[step]}`;
+}
+
+function parseRoute(hash) {
+  if (!hash) return { view: "split" }; // no route yet: let saved progress decide the screen
+  const [a, b] = hash.replace(/^#\/?/, "").split("/");
+  if (a === "settings") return { view: "settings" };
+  if (a === "history") return { view: "history", openEntryId: b ? decodeURIComponent(b) : null };
+  if (a === "bill") return { view: "split", step: 0, billMode: b === "manual" ? "manual" : b === "scan" ? "upload" : null };
+  const step = STEP_ROUTES.indexOf(a);
+  return { view: "split", step: step > 0 ? step : 0, billMode: null };
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function BillSplitter() {
   const [step, setStep] = usePersisted("step", 0);
@@ -1123,13 +1150,17 @@ export default function BillSplitter() {
   const [payment, setPayment] = usePersisted("payment", null);
   const [splitId, setSplitId] = usePersisted("splitId", null);
   const [history, setHistory] = useStoredState(HISTORY_KEY, []);
-  const [view, setView] = useState("split"); // "split" | "settings" | "history"
-  const [openEntryId, setOpenEntryId] = useState(null);
+  const initialRoute = useRef(parseRoute(location.hash)).current;
+  const [view, setView] = useState(initialRoute.view); // "split" | "settings" | "history"
+  const [openEntryId, setOpenEntryId] = useState(initialRoute.openEntryId ?? null);
+  const [billMode, setBillMode] = useState( // null | "upload" | "manual"
+    initialRoute.billMode !== undefined ? initialRoute.billMode : (bill ? "manual" : null)
+  );
   const [keyVersion, setKeyVersion] = useState(0);
   const [resetCount, setResetCount] = useState(0);
 
   const resetSplit = () => {
-    setStep(0); setBill(null); setPeople([]); setAssignments({}); setSplitId(null);
+    setStep(0); setBill(null); setPeople([]); setAssignments({}); setSplitId(null); setBillMode(null);
     setResetCount(n => n + 1); // remount BillStep so its draft form is cleared too
   };
 
@@ -1163,7 +1194,55 @@ export default function BillSplitter() {
   const deleteEntry = (entryId) => {
     setHistory(prev => prev.filter(e => e.id !== entryId));
     if (entryId === splitId) resetSplit(); // otherwise the open summary would re-save it
-    setOpenEntryId(null);
+    goBack(() => setOpenEntryId(null));
+  };
+
+  // Furthest step the current data allows, so stale or hand-typed routes can't open an empty screen
+  const clampStep = (s) => {
+    if (!bill) return 0;
+    if (s >= 2 && people.length < 2) return 1;
+    if (s >= 3 && !bill.items.every(item => (assignments[item.id] || []).length > 0)) return 2;
+    return s;
+  };
+
+  // Keep the URL in sync with the screen: user navigation pushes a history entry; the first
+  // render and corrections after a back/forward (e.g. a clamped step) replace instead
+  const firstRoute = useRef(true);
+  const replaceNext = useRef(false);
+  useEffect(() => {
+    const target = routeFor({ view, openEntryId, step, billMode });
+    if (location.hash === target) { firstRoute.current = false; replaceNext.current = false; return; }
+    const depth = window.history.state?.depth ?? 0; // `history` in this component is the saved-splits list
+    if (firstRoute.current || replaceNext.current) window.history.replaceState({ depth }, "", target);
+    else window.history.pushState({ depth: depth + 1 }, "", target);
+    firstRoute.current = false;
+    replaceNext.current = false;
+  }, [view, openEntryId, step, billMode]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const r = parseRoute(location.hash);
+      const next = {
+        view: r.view,
+        openEntryId: r.view === "history" && r.openEntryId && history.some(e => e.id === r.openEntryId) ? r.openEntryId : null,
+        step: r.view === "split" ? clampStep(r.step ?? step) : step,
+        billMode
+      };
+      if (r.view === "split" && next.step === 0) next.billMode = r.billMode ?? null;
+      setView(next.view); setOpenEntryId(next.openEntryId); setStep(next.step); setBillMode(next.billMode);
+      // Stale entries (e.g. #/summary after starting a new split) show a different screen; fix the URL in place
+      const target = routeFor(next);
+      if (location.hash !== target) window.history.replaceState(window.history.state, "", target);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  });
+
+  // In-app back buttons walk the same browser history; with nothing to go back to
+  // (fresh load or reload), apply the fallback screen in place
+  const goBack = (fallback) => {
+    if ((window.history.state?.depth ?? 0) > 0) window.history.back();
+    else { replaceNext.current = true; fallback(); }
   };
 
   const currentEntry = history.find(e => e.id === splitId);
@@ -1214,13 +1293,13 @@ export default function BillSplitter() {
             {openEntry ? (
               <HistoryDetail
                 entry={openEntry} payment={payment}
-                onBack={() => setOpenEntryId(null)}
+                onBack={() => goBack(() => setOpenEntryId(null))}
                 onDelete={() => deleteEntry(openEntry.id)}
                 onTogglePaid={personId => togglePaid(openEntry.id, personId)}
                 onOpenSettings={() => setView("settings")}
               />
             ) : (
-              <HistoryList history={history} onOpen={setOpenEntryId} onClose={() => setView("split")} />
+              <HistoryList history={history} onOpen={setOpenEntryId} onClose={() => goBack(() => setView("split"))} />
             )}
           </div>
         )}
@@ -1228,7 +1307,7 @@ export default function BillSplitter() {
         {view === "settings" && (
           <div style={{ padding: "0 24px 24px" }}>
             <SettingsPage
-              onClose={() => setView("split")}
+              onClose={() => goBack(() => setView("split"))}
               onKeyChanged={() => setKeyVersion(v => v + 1)}
               onClearSplit={resetSplit}
               onEraseAll={eraseAll}
@@ -1247,8 +1326,9 @@ export default function BillSplitter() {
         <div className="fill" style={{ padding: "0 24px 24px" }}>
           {step === 0 && <BillStep
             key={resetCount} initial={bill} keyVersion={keyVersion} onReset={resetSplit}
+            mode={billMode} setMode={setBillMode} onBack={() => goBack(() => setBillMode(null))}
             onDone={parsed => { setBill(parsed); setStep(1); }} />}
-          {step >= 1 && <TopBar onBack={() => setStep(s => s - 1)} onReset={resetSplit} hasData />}
+          {step >= 1 && <TopBar onBack={() => goBack(() => { if (step === 1) setBillMode("manual"); setStep(step - 1); })} onReset={resetSplit} hasData />}
           {step === 1 && <PeopleStep people={people} setPeople={setPeople} bill={bill} savedNames={savedNames} setSavedNames={setSavedNames} />}
           {step === 2 && <AssignStep bill={bill} people={people} assignments={assignments} setAssignments={setAssignments} />}
           {step === 3 && <SummaryStep
