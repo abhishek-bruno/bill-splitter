@@ -56,22 +56,22 @@ export default function InstallBanner() {
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, border: "1px solid #e5e7eb", borderRadius: 14, padding: "12px 14px", background: "#fafafa" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, border: "1px solid var(--border)", borderRadius: 14, padding: "12px 14px", background: "var(--surface-2)" }}>
       <img src="pwa-64x64.png" alt="" width="40" height="40" style={{ borderRadius: 10, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: "#111" }}>Install SplitEasy</div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2, lineHeight: 1.4 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>Install SplitEasy</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, lineHeight: 1.4 }}>
           {ios
             ? <>Tap <ShareIcon /> Share, then <b>Add to Home Screen</b></>
             : "Opens like an app and works offline"}
         </div>
       </div>
       {!ios && (
-        <button onClick={install} style={{ border: "none", borderRadius: 10, padding: "8px 14px", background: "#6366f1", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>
+        <button onClick={install} style={{ border: "none", borderRadius: 10, padding: "8px 14px", background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0 }}>
           Install
         </button>
       )}
-      <button onClick={dismiss} aria-label="Dismiss" style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 20, lineHeight: 1, cursor: "pointer", padding: "0 2px", flexShrink: 0 }}>×</button>
+      <button onClick={dismiss} aria-label="Dismiss" style={{ background: "none", border: "none", color: "var(--subtle)", fontSize: 20, lineHeight: 1, cursor: "pointer", padding: "0 2px", flexShrink: 0 }}>×</button>
     </div>
   );
 }
