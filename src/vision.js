@@ -4,7 +4,8 @@
 export const PROVIDERS = {
   google: {
     label: "Google Gemini",
-    defaultModel: "gemini-2.5-flash",
+    // Alias that tracks Google's current Flash model, so retirements don't break scanning
+    defaultModel: "gemini-flash-latest",
     keyUrl: "https://aistudio.google.com/apikey",
     keyHint: "AIza…"
   },
@@ -21,6 +22,14 @@ export const PROVIDERS = {
     keyHint: "sk-…"
   }
 };
+
+// Models the providers have retired, mapped to their replacement. Saved configs are upgraded on load.
+export const RETIRED_MODELS = {
+  "gemini-2.5-flash": "gemini-flash-latest"
+};
+
+export const upgradeModel = (config) =>
+  config && RETIRED_MODELS[config.model] ? { ...config, model: RETIRED_MODELS[config.model] } : config;
 
 const PROMPT = `Read this restaurant bill or receipt and extract it as JSON.
 - restaurant: the venue name, or "" if not visible.
@@ -168,7 +177,7 @@ function normalize(raw) {
 export async function parseBillImage(file, config) {
   if (!navigator.onLine) throw new Error("You're offline. Scanning needs internet; enter the bill manually instead.");
   const img = await prepareImage(file);
-  const text = await CALLERS[config.provider](config, img);
+  const text = await CALLERS[config.provider](upgradeModel(config), img);
   let raw;
   try {
     raw = JSON.parse(text.replace(/```json|```/g, "").trim());
