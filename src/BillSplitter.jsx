@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { PROVIDERS, parseBillImage, upgradeModel } from "./vision.js";
+import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey } from "./vision.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
 import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy } from "./payment.js";
 
@@ -134,8 +134,9 @@ const linkBtn = {
 // Loads the saved vision config, replacing a retired model with its successor and saving that back
 async function loadVisionConfig() {
   const saved = await loadSecret("vision");
-  const upgraded = upgradeModel(saved);
-  if (upgraded !== saved) await saveSecret("vision", upgraded);
+  if (!saved) return saved;
+  const upgraded = { ...upgradeModel(saved), apiKey: cleanApiKey(saved.apiKey) };
+  if (upgraded.model !== saved.model || upgraded.apiKey !== saved.apiKey) await saveSecret("vision", upgraded);
   return upgraded;
 }
 
@@ -152,9 +153,12 @@ function ApiKeySettings({ config, onSave, onCancel }) {
     setModel(id === config?.provider ? config.model : PROVIDERS[id].defaultModel);
   };
 
+  const cleanedKey = cleanApiKey(apiKey);
+  const keyInvalid = cleanedKey !== "" && !isValidApiKey(cleanedKey);
+
   const save = async () => {
     setSaving(true);
-    await onSave({ provider, apiKey: apiKey.trim(), model: model.trim() || p.defaultModel });
+    await onSave({ provider, apiKey: cleanedKey, model: model.trim() || p.defaultModel });
     setSaving(false);
   };
 
@@ -181,6 +185,11 @@ function ApiKeySettings({ config, onSave, onCancel }) {
         placeholder={p.keyHint} autoComplete="off" spellCheck={false}
         style={{ ...inputStyle, marginBottom: 4 }}
       />
+      {keyInvalid && (
+        <div style={{ fontSize: 12, color: "#ef4444", marginBottom: 4 }}>
+          This key has characters that aren't allowed. Copy it again from {p.label}.
+        </div>
+      )}
       <a href={p.keyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#6366f1", display: "inline-block", marginBottom: 14 }}>Get a {p.label} key ↗</a>
 
       <label style={labelStyle}>Model</label>
@@ -192,10 +201,10 @@ function ApiKeySettings({ config, onSave, onCancel }) {
 
       <div style={{ display: "flex", gap: 10 }}>
         <button onClick={onCancel} style={{ flex: 1, border: "1.5px solid #e5e7eb", background: "#fff", borderRadius: 10, padding: 12, fontWeight: 600, cursor: "pointer", color: "#374151" }}>Cancel</button>
-        <button onClick={save} disabled={!apiKey.trim() || saving} style={{
+        <button onClick={save} disabled={!cleanedKey || keyInvalid || saving} style={{
           flex: 2, border: "none", borderRadius: 10, padding: 12, fontWeight: 700,
-          background: apiKey.trim() ? "#6366f1" : "#e5e7eb", color: apiKey.trim() ? "#fff" : "#9ca3af",
-          cursor: apiKey.trim() ? "pointer" : "default"
+          background: cleanedKey && !keyInvalid ? "#6366f1" : "#e5e7eb", color: cleanedKey && !keyInvalid ? "#fff" : "#9ca3af",
+          cursor: cleanedKey && !keyInvalid ? "pointer" : "default"
         }}>{saving ? "Saving…" : "Save key"}</button>
       </div>
     </div>
