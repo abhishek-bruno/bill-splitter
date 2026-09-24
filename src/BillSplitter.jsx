@@ -343,8 +343,8 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   // Landing: pick mode
   const scanDefault = !!apiConfig && online;
   const optionStyle = (primary) => ({
-    flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, borderRadius: 14, padding: "12px 8px",
-    cursor: "pointer", textAlign: "center", minWidth: 0,
+    display: "flex", alignItems: "center", gap: 14, borderRadius: 14, padding: "13px 16px",
+    cursor: "pointer", textAlign: "left", width: "100%",
     border: `1.5px solid ${primary ? "var(--accent)" : "var(--border)"}`, background: primary ? "var(--accent-soft)" : "var(--surface)"
   });
 
@@ -368,23 +368,26 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           </div>
         ))}
       </div>
-      <div className="home-install">
-        <InstallBanner />
-      </div>
-
       <StickyFooter bleed>
-        <div style={{ display: "flex", gap: 10 }}>
+        <InstallBanner toast />
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <button onClick={() => { setMode("upload"); setError(""); }} style={optionStyle(scanDefault)}>
-            <span style={{ fontSize: 24 }}>🧾</span>
-            <span style={{ fontWeight: 700, fontSize: 14, color: scanDefault ? "var(--accent)" : "var(--text)" }}>Scan bill</span>
-            <span style={{ fontSize: 11, color: scanDefault ? "var(--accent-muted)" : "var(--subtle)" }}>
-              {!online ? "Needs internet" : apiConfig ? `With ${PROVIDERS[apiConfig.provider].label}` : "Uses your AI key"}
+            <span style={{ fontSize: 28 }}>🧾</span>
+            <span>
+              <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: scanDefault ? "var(--accent)" : "var(--text)" }}>Scan bill photo</span>
+              <span style={{ display: "block", fontSize: 12, color: scanDefault ? "var(--accent-muted)" : "var(--subtle)", marginTop: 2 }}>
+                {!online ? "Needs internet. You're offline right now."
+                  : apiConfig ? `AI reads the items using ${PROVIDERS[apiConfig.provider].label}`
+                  : "AI reads the items using your own AI key"}
+              </span>
             </span>
           </button>
           <button onClick={() => setMode("manual")} style={optionStyle(!scanDefault)}>
-            <span style={{ fontSize: 24 }}>✏️</span>
-            <span style={{ fontWeight: 700, fontSize: 14, color: scanDefault ? "var(--text)" : "var(--accent)" }}>Enter manually</span>
-            <span style={{ fontSize: 11, color: scanDefault ? "var(--subtle)" : "var(--accent-muted)" }}>Works offline</span>
+            <span style={{ fontSize: 28 }}>✏️</span>
+            <span>
+              <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: scanDefault ? "var(--text)" : "var(--accent)" }}>Enter manually</span>
+              <span style={{ display: "block", fontSize: 12, color: scanDefault ? "var(--subtle)" : "var(--accent-muted)", marginTop: 2 }}>Type in items and charges yourself. Works offline.</span>
+            </span>
           </button>
         </div>
       </StickyFooter>

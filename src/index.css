@@ -69,10 +69,11 @@ html { scroll-padding-top: 150px; scroll-padding-bottom: 96px; }
 /* Home page: roomy on tall phones, compact on short ones so the page never needs to scroll */
 .home-sub { margin-bottom: 20px; }
 .home-features { gap: 14px; }
-.home-install { padding-top: 20px; }
 @media (max-height: 760px) {
   .home-sub { margin-bottom: 14px; }
   .home-features { gap: 8px; }
   .home-feature-text { display: none; }
-  .home-install { padding-top: 14px; }
 }
+
+.install-toast { animation: toast-in .25s ease-out; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
