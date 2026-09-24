@@ -1,9 +1,30 @@
 *, *::before, *::after { box-sizing: border-box; }
-html, body { margin: 0; background: #f3f4f6; -webkit-text-size-adjust: 100%; }
-body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+html, body { margin: 0; background: #fff; -webkit-text-size-adjust: 100%; }
+/* the sticky footer handles the bottom inset itself */
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
 button, input, select { font: inherit; }
 /* 16px inputs stop iOS Safari from zooming on focus */
 input, select { font-size: 16px !important; }
 button { -webkit-tap-highlight-color: transparent; }
 /* keep focused fields clear of the sticky bottom button when the browser scrolls them into view */
 html { scroll-padding-bottom: 96px; }
+
+/* Phones: the app fills the screen edge to edge, so the bottom button sits at the bottom of the screen */
+.app-shell { display: flex; justify-content: center; }
+.app-card {
+  width: 100%; max-width: 480px; background: #fff;
+  display: flex; flex-direction: column;
+  min-height: calc(100vh - env(safe-area-inset-top));
+  min-height: calc(100dvh - env(safe-area-inset-top));
+}
+/* stretches down the tree so the footer can be pushed to the bottom on short pages */
+.fill { flex: 1; display: flex; flex-direction: column; }
+.sticky-footer { position: sticky; bottom: 0; margin-top: auto; }
+
+/* Wider screens: a centered card on a grey background */
+@media (min-width: 560px) {
+  html, body { background: #f3f4f6; }
+  .app-shell { padding: 24px 16px; }
+  .app-card { border-radius: 20px; box-shadow: 0 4px 32px #0001; min-height: calc(100vh - 48px); min-height: calc(100dvh - 48px); }
+  .sticky-footer { border-radius: 0 0 20px 20px; }
+}

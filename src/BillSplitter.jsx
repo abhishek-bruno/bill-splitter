@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey } from "./vision.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
+import InstallBanner from "./InstallPrompt.jsx";
 import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy } from "./payment.js";
 
 const COLORS = [
@@ -109,11 +110,11 @@ function TopBar({ onBack, onReset, hasData }) {
 // Primary action pinned to the bottom of the screen while scrolling; bleed cancels the parent's padding
 function StickyFooter({ children, bleed = false }) {
   return (
-    <div style={{
-      position: "sticky", bottom: 0, zIndex: 1, background: "#fff",
-      margin: bleed ? "0 -24px -24px" : 0,
+    <div className="sticky-footer" style={{
+      zIndex: 1, background: "#fff",
+      ...(bleed && { marginLeft: -24, marginRight: -24, marginBottom: -24 }),
       padding: "12px 24px calc(16px + env(safe-area-inset-bottom))",
-      borderTop: "1px solid #f3f4f6", borderRadius: "0 0 20px 20px"
+      borderTop: "1px solid #f3f4f6"
     }}>
       {children}
     </div>
@@ -321,35 +322,39 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
   const topBar = <TopBar onBack={goLanding} onReset={onReset} hasData={formHasData} />;
 
   // Landing: pick mode
+  const scanDefault = !!apiConfig && online;
+  const optionStyle = (primary) => ({
+    display: "flex", alignItems: "center", gap: 14, borderRadius: 14, padding: "16px 18px",
+    cursor: "pointer", textAlign: "left", width: "100%",
+    border: `1.5px solid ${primary ? "#6366f1" : "#e5e7eb"}`, background: primary ? "#f0f0ff" : "#fff"
+  });
+
   if (!mode) return (
-    <div>
+    <div className="fill">
       <div style={{ fontWeight: 700, fontSize: 16, color: "#111", marginBottom: 6 }}>How do you want to add the bill?</div>
       <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 20 }}>Scan a photo or enter items manually</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <button onClick={() => { setMode("upload"); setError(""); }} style={{
-          display: "flex", alignItems: "center", gap: 14,
-          border: "1.5px solid #e5e7eb", borderRadius: 14, padding: "16px 18px",
-          background: "#fff", cursor: "pointer", textAlign: "left"
-        }}>
+        <button onClick={() => { setMode("upload"); setError(""); }} style={optionStyle(scanDefault)}>
           <div style={{ fontSize: 32 }}>🧾</div>
           <div>
-            <div style={{ fontWeight: 700, color: "#111", fontSize: 14 }}>Scan bill photo</div>
-            <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
-              {online ? "AI reads the items using your own Gemini, Claude or OpenAI key" : "Needs internet. You're offline right now."}
+            <div style={{ fontWeight: 700, color: scanDefault ? "#6366f1" : "#111", fontSize: 14 }}>Scan bill photo</div>
+            <div style={{ fontSize: 12, color: scanDefault ? "#818cf8" : "#9ca3af", marginTop: 2 }}>
+              {!online ? "Needs internet. You're offline right now."
+                : apiConfig ? `AI reads the items using ${PROVIDERS[apiConfig.provider].label}`
+                : "AI reads the items using your own Gemini, Claude or OpenAI key"}
             </div>
           </div>
         </button>
-        <button onClick={() => setMode("manual")} style={{
-          display: "flex", alignItems: "center", gap: 14,
-          border: "1.5px solid #6366f1", borderRadius: 14, padding: "16px 18px",
-          background: "#f0f0ff", cursor: "pointer", textAlign: "left"
-        }}>
+        <button onClick={() => setMode("manual")} style={optionStyle(!scanDefault)}>
           <div style={{ fontSize: 32 }}>✏️</div>
           <div>
-            <div style={{ fontWeight: 700, color: "#6366f1", fontSize: 14 }}>Enter manually</div>
-            <div style={{ fontSize: 12, color: "#818cf8", marginTop: 2 }}>Type in items, amounts and charges yourself. Works offline.</div>
+            <div style={{ fontWeight: 700, color: scanDefault ? "#111" : "#6366f1", fontSize: 14 }}>Enter manually</div>
+            <div style={{ fontSize: 12, color: scanDefault ? "#9ca3af" : "#818cf8", marginTop: 2 }}>Type in items, amounts and charges yourself. Works offline.</div>
           </div>
         </button>
+      </div>
+      <div style={{ marginTop: "auto", paddingTop: 24 }}>
+        <InstallBanner />
       </div>
     </div>
   );
@@ -436,7 +441,7 @@ function BillStep({ initial, onDone, onReset, keyVersion }) {
   const manualValid = items.some(i => i.name.trim() && parseFloat(i.amount) > 0);
   const scannedTotal = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0) + taxes.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   return (
-    <div>
+    <div className="fill">
       {topBar}
       {scanned && (
         <div style={{ fontSize: 13, color: "#065f46", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>
@@ -1184,8 +1189,8 @@ export default function BillSplitter() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f3f4f6", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 16px", fontFamily: "'Inter', -apple-system, sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: 20, boxShadow: "0 4px 32px #0001" }}>
+    <div className="app-shell" style={{ fontFamily: "'Inter', -apple-system, sans-serif" }}>
+      <div className="app-card">
         <div style={{ padding: "24px 24px 0" }}>
           <div style={{ fontWeight: 800, fontSize: 20, color: "#111", marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
             <span>🍕</span> SplitEasy
@@ -1238,8 +1243,8 @@ export default function BillSplitter() {
         )}
 
         {/* Hidden rather than unmounted while other views are open, so an in-progress bill form isn't lost */}
-        <div style={{ display: view === "split" ? "block" : "none" }}>
-        <div style={{ padding: "0 24px 24px" }}>
+        <div className="fill" style={view === "split" ? undefined : { display: "none" }}>
+        <div className="fill" style={{ padding: "0 24px 24px" }}>
           {step === 0 && <BillStep
             key={resetCount} initial={bill} keyVersion={keyVersion} onReset={resetSplit}
             onDone={parsed => { setBill(parsed); setStep(1); }} />}
