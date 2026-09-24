@@ -1182,6 +1182,15 @@ export default function BillSplitter() {
   const [payment, setPayment] = usePersisted("payment", null);
   const [theme, setTheme] = usePersisted("theme", "system");
   useTheme(theme);
+  // What is actually showing, so the header toggle can flip it even while following the system
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => setSystemDark(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+  const isDark = theme === "dark" || (theme === "system" && systemDark);
   const [splitId, setSplitId] = usePersisted("splitId", null);
   const [history, setHistory] = useStoredState(HISTORY_KEY, []);
   const initialRoute = useRef(parseRoute(location.hash)).current;
@@ -1319,6 +1328,11 @@ export default function BillSplitter() {
             <img src="pizza.svg" alt="" width="28" height="28" style={{ flexShrink: 0 }} /> SplitEasy
             {view === "split" && (
               <div style={{ marginLeft: "auto", display: "flex", gap: 2 }}>
+                <HeaderIcon label={isDark ? "Switch to light mode" : "Switch to dark mode"} onClick={() => setTheme(isDark ? "light" : "dark")}>
+                  {isDark
+                    ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>
+                    : <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />}
+                </HeaderIcon>
                 <HeaderIcon label="History" onClick={() => { setOpenEntryId(null); setView("history"); }}>
                   <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
                 </HeaderIcon>
