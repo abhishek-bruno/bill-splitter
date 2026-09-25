@@ -19,6 +19,8 @@ export default defineConfig({
         orientation: "portrait",
         start_url: "./",
         scope: "./",
+        // Lets the browser tab ask (getInstalledRelatedApps) whether this app is already installed
+        related_applications: [{ platform: "webapp", url: "https://abhishek-bruno.github.io/bill-splitter/manifest.webmanifest" }],
         icons: [
           { src: "pwa-64x64.png", sizes: "64x64", type: "image/png" },
           { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
