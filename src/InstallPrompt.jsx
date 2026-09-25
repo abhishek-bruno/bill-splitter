@@ -5,7 +5,11 @@ let deferredPrompt = null;
 const listeners = new Set();
 const notify = () => listeners.forEach(fn => fn());
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredPrompt = e; notify(); });
-window.addEventListener("appinstalled", () => { deferredPrompt = null; notify(); });
+let installedElsewhere = false; // true when opened in a browser tab but the app is already installed
+window.addEventListener("appinstalled", () => { deferredPrompt = null; installedElsewhere = true; notify(); });
+navigator.getInstalledRelatedApps?.()
+  .then(apps => { if (apps.length) { installedElsewhere = true; notify(); } })
+  .catch(() => {});
 
 const DISMISS_KEY = "spliteasy:installDismissedAt";
 const DISMISS_DAYS = 14;
@@ -43,7 +47,10 @@ export default function InstallBanner({ permanent = false, toast = false }) {
   if (permanent && isStandalone()) return (
     <div style={{ fontSize: 14, color: "var(--muted)" }}>✓ SplitEasy is installed on this device.</div>
   );
-  if (isStandalone() || (!permanent && dismissed)) return null;
+  if (permanent && installedElsewhere && !deferredPrompt) return (
+    <div style={{ fontSize: 14, color: "var(--muted)" }}>✓ SplitEasy is already installed. Open it from your home screen or app list.</div>
+  );
+  if (isStandalone() || installedElsewhere || (!permanent && dismissed)) return null;
   // Browsers without a one-tap prompt (Firefox, or Chrome before it offers one) only get the Settings hint
   if (!deferredPrompt && !ios && !permanent) return null;
 

@@ -99,16 +99,12 @@ const ResetButton = ({ onReset, hasData }) => (
 
 // Home page selling points; icons are 24x24 stroke paths
 const FEATURES = [
-  { title: "Works offline", text: "Everything except photo scanning works with no internet.",
-    icon: <><path d="M2 2l20 20" /><path d="M8.5 16.5a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 5.2-2.8M19 12.9a10 10 0 0 0-2.3-1.6M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8a15 15 0 0 0-11.9-3.8" /><path d="M12 20h.01" /></> },
-  { title: "No account, no setup", text: "Nothing to sign up for. Open the app and start.",
-    icon: <><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0 1 12 0v1" /><path d="M17 11l4 4M21 11l-4 4" /></> },
+  { title: "Fully local, no account", text: "Nothing to sign up for. Your data stays on your phone.",
+    icon: <><path d="M2 2l20 20" /><path d="M5.8 5.8A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.3-.2" /><path d="M21.5 16.5A4.5 4.5 0 0 0 17.5 10h-1.8A7 7 0 0 0 10 5.1" /></> },
   { title: "Enter the bill, get the split", text: "Items split by who had them, taxes shared equally.",
     icon: <><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" /><path d="M9 7h6M9 11h6M9 15h3" /></> },
   { title: "Share payment details", text: "Send each person their share with a UPI pay link.",
-    icon: <><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></> },
-  { title: "Private by default", text: "Your bills and history stay on this device.",
-    icon: <><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></> }
+    icon: <><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></> }
 ];
 
 // Top navigation row shown on every screen: Back on the left, Reset on the right
@@ -350,8 +346,10 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
 
   if (!mode) return (
     <div className="fill">
-      <div style={{ fontWeight: 800, fontSize: 24, color: "var(--text)", lineHeight: 1.2 }}>Split any bill in seconds</div>
-      <div className="home-sub" style={{ color: "var(--muted)", fontSize: 14, marginTop: 6 }}>Enter what everyone had and see who owes what.</div>
+      {/* Intro block centers itself vertically in the space above the buttons */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", paddingBottom: 16 }}>
+      <div style={{ fontWeight: 700, fontSize: 17, color: "var(--text)", lineHeight: 1.3 }}>Split any bill in seconds</div>
+      <div className="home-sub" style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>Enter what everyone had and see who owes what.</div>
       <div className="home-features" style={{ display: "flex", flexDirection: "column" }}>
         {FEATURES.map(f => (
           <div key={f.title} style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -367,6 +365,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
             </div>
           </div>
         ))}
+      </div>
       </div>
       <StickyFooter bleed>
         <InstallBanner toast />
