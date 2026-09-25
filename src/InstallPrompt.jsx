@@ -31,7 +31,7 @@ const ShareIcon = () => (
 );
 
 // Install banner: one-tap install where the browser supports it, Add to Home Screen steps on iOS.
-// On the home page it floats as a dismissible toast above the bottom buttons (its parent must be
+// On the home page it floats as a dismissible toast below the header (its parent must be
 // positioned); in Settings (permanent) it sits inline and always shows.
 export default function InstallBanner({ permanent = false, toast = false }) {
   const [, rerender] = useState(0);
@@ -72,7 +72,7 @@ export default function InstallBanner({ permanent = false, toast = false }) {
     <div role={toast ? "status" : undefined} className={toast ? "install-toast" : undefined} style={{
       display: "flex", alignItems: "center", gap: 12, border: "1px solid var(--border)", borderRadius: 14, padding: "12px 14px",
       background: toast ? "var(--surface)" : "var(--surface-2)",
-      ...(toast && { position: "absolute", left: 16, right: 16, bottom: "calc(100% + 10px)", boxShadow: "0 8px 28px #0003" })
+      ...(toast && { position: "absolute", left: 16, right: 16, top: "calc(100% + 8px)", boxShadow: "0 8px 28px #0003" })
     }}>
       <img src="pwa-64x64.png" alt="" width="40" height="40" style={{ borderRadius: 10, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
