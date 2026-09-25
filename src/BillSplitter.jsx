@@ -368,7 +368,6 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       </div>
       </div>
       <StickyFooter bleed>
-        <InstallBanner toast />
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <button onClick={() => { setMode("upload"); setError(""); }} style={optionStyle(scanDefault)}>
             <span style={{ fontSize: 28 }}>🧾</span>
@@ -1373,6 +1372,8 @@ export default function BillSplitter() {
             )}
           </div>
           {view === "split" && <StepBar current={step} />}
+          {/* home page only: floats just below the header */}
+          {view === "split" && step === 0 && !billMode && <InstallBanner toast />}
         </div>
 
         {view === "history" && (
