@@ -1016,7 +1016,8 @@ const formatDateTime = (ts) => new Intl.DateTimeFormat(undefined, {
 
 // The first person paid the bill; everyone else owes them
 const paidStatus = (entry) => {
-  const debtors = entry.people.slice(1);
+  // Only people who owe something count (someone on no items has nothing to pay)
+  const debtors = computeTotals(entry.bill, entry.people, entry.assignments).slice(1).filter(p => p.total >= 0.005);
   const paidCount = debtors.filter(p => entry.paid?.[p.id]).length;
   return { paidCount, total: debtors.length, settled: debtors.length > 0 && paidCount === debtors.length };
 };
@@ -1048,6 +1049,7 @@ function CopyAmount({ value, display, label, style }) {
 // ── Step 4: Summary ───────────────────────────────────────────────────────────
 function SummaryStep({ bill, people, assignments, payment, onOpenSettings, savedAt, paid = {}, onTogglePaid }) {
   const totals = computeTotals(bill, people, assignments);
+  const owes = (p) => p.total >= 0.005;
   // Expanded cards: "bill" for the top card (full breakdown), or person ids (their own lines)
   const [open, setOpen] = useState({});
   const toggle = (key) => setOpen(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1099,7 +1101,8 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
       {qrRequest && <PayQrSheet person={qrPerson} request={qrRequest} onClose={() => setQrPerson(null)} />}
       {(() => {
         // Who still owes: everyone after the payer, minus those marked paid
-        const debtors = totals.slice(1);
+        // Only people who actually owe something (someone on no items owes nothing)
+        const debtors = totals.slice(1).filter(owes);
         const toCollect = debtors.reduce((t, p) => t + p.total, 0);
         const left = debtors.filter(p => !paid[p.id]).reduce((t, p) => t + p.total, 0);
         const paidCount = debtors.filter(p => paid[p.id]).length;
@@ -1170,13 +1173,14 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
                 <div style={{ fontWeight: 700 }}>{p.name}</div>
                 {i === 0 && <div style={{ fontSize: 11, color: "var(--muted)" }}>Payer</div>}
                 {/* Paid status lives under the name: a link to mark it, and the date with an undo once paid */}
-                {i > 0 && paid[p.id] && (
+                {i > 0 && !owes(p) && <div style={{ fontSize: 11, lineHeight: "16px", height: 16, color: "var(--muted)" }}>Nothing to pay</div>}
+                {i > 0 && owes(p) && paid[p.id] && (
                   <div style={{ fontSize: 11, lineHeight: "16px", height: 16, color: "var(--success-text)", fontWeight: 600 }}>
                     <span title={formatDateTime(paid[p.id])}><CheckIcon size={11} /> Paid {new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(paid[p.id])}</span>
                     {onTogglePaid && <> · <button onClick={() => onTogglePaid(p.id)} style={{ background: "none", border: "none", padding: 0, fontSize: 11, lineHeight: "inherit", color: "var(--subtle)", cursor: "pointer", textDecoration: "underline", fontFamily: "inherit", verticalAlign: "baseline" }}>Undo</button></>}
                   </div>
                 )}
-                {i > 0 && !paid[p.id] && onTogglePaid && (
+                {i > 0 && owes(p) && !paid[p.id] && onTogglePaid && (
                   <button onClick={() => onTogglePaid(p.id)} style={{ display: "block", background: "none", border: "none", padding: 0, fontSize: 11, lineHeight: "16px", height: 16, fontWeight: 600, color: "var(--accent)", cursor: "pointer", fontFamily: "inherit" }}>Mark as paid</button>
                 )}
               </div>
@@ -1193,7 +1197,7 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
               </div>
             )}
             {/* Nothing left to do once they've paid; Undo lives next to the paid date */}
-            {i > 0 && !paid[p.id] && (
+            {i > 0 && owes(p) && !paid[p.id] && (
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button onClick={() => sharePayment(p)} style={{
                 flex: 2,
@@ -1293,7 +1297,7 @@ function HistoryList({ history, onOpen, onClose, selected, setSelected }) {
   );
 }
 
-function HistoryDetail({ entry, payment, onBack, onDelete, onTogglePaid, onOpenSettings }) {
+function HistoryDetail({ entry, payment, onBack, onDelete, onEdit, onTogglePaid, onOpenSettings }) {
   return (
     <div className="fill">
       <SummaryStep
@@ -1303,6 +1307,8 @@ function HistoryDetail({ entry, payment, onBack, onDelete, onTogglePaid, onOpenS
       <StickyFooter bleed>
         <div style={{ display: "flex", gap: 8 }}>
           <FooterReset onReset={onDelete} deletes />
+          {/* Same order as the settle screen: delete, Edit, then the wide button */}
+          <button onClick={onEdit} style={footerBackBtn}><Icon d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" size={16} /> Edit</button>
           <button onClick={onBack} style={{ ...footerBackBtn, flex: 1 }}><ArrowLeftIcon size={16} /> History</button>
         </div>
       </StickyFooter>
@@ -1676,6 +1682,19 @@ export default function BillSplitter() {
     resetSplit();
   };
 
+  // Edit a saved split: load it into the steps at Assign. It keeps its id, so auto-save updates the same
+  // History entry (paid status included). An unsaved split in progress is replaced only after asking.
+  const [pendingEdit, setPendingEdit] = useState(null);
+  const loadForEdit = (entry) => {
+    setBill(entry.bill); setPeople(entry.people); setAssignments(entry.assignments); setSplitId(entry.id);
+    setBillMode("manual"); setResetCount(n => n + 1); // remount the bill form with this bill
+    setOpenEntryId(null); setView("split"); setStep(2);
+  };
+  const editEntry = (entry) => {
+    const unsaved = bill && splitId !== entry.id && !history.some(e => e.id === splitId);
+    if (unsaved) setPendingEdit(entry); else loadForEdit(entry);
+  };
+
   const deleteEntry = (entryId) => {
     setHistory(prev => prev.filter(e => e.id !== entryId));
     if (entryId === splitId) resetSplit(); // otherwise the open summary would re-save it
@@ -1813,6 +1832,15 @@ export default function BillSplitter() {
               </div>
             )}
           </div>
+          {pendingEdit && (
+            <ConfirmModal
+              title="Replace current split?"
+              message="Are you sure? The split you haven't finished will be cleared."
+              confirmLabel="Replace"
+              onCancel={() => setPendingEdit(null)}
+              onConfirm={() => { const e = pendingEdit; setPendingEdit(null); loadForEdit(e); }}
+            />
+          )}
           {confirmDeleteSelected && (
             <ConfirmModal
               title={`Delete ${selectedHistory.length} ${selectedHistory.length === 1 ? "split" : "splits"}?`}
@@ -1843,6 +1871,7 @@ export default function BillSplitter() {
                 entry={openEntry} payment={payment}
                 onBack={() => goBack(() => setOpenEntryId(null))}
                 onDelete={() => deleteEntry(openEntry.id)}
+                onEdit={() => editEntry(openEntry)}
                 onTogglePaid={personId => togglePaid(openEntry.id, personId)}
                 onOpenSettings={() => setView("settings")}
               />
