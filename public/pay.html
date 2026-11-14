@@ -60,7 +60,10 @@
     .sheet { width: 100%; max-width: 480px; background: var(--card); border-radius: 18px 18px 0 0; padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); text-align: center;
       animation: up .28s cubic-bezier(.2, .8, .2, 1); }
     /* The full bill sheet is the receipt itself */
-    .sheet.tall { position: relative; max-height: 90vh; overflow-y: auto; text-align: left; }
+    .sheet.tall { position: relative; max-height: 90vh; text-align: left; display: flex; flex-direction: column; overflow: hidden; }
+    .sheet.tall #billbody { display: flex; flex-direction: column; min-height: 0; }
+    .sheet .receipt { display: flex; flex-direction: column; min-height: 0; }
+    .sheet .r-scroll { overflow-y: auto; min-height: 0; margin: 0 -16px; padding: 0 16px; overscroll-behavior: contain; }
     .sheet .receipt { background: none; box-shadow: none; padding: 6px 4px 0; margin: 0; animation: none; }
     .sheet .receipt::after { display: none; }
     .x.corner { position: absolute; top: 14px; right: 12px; z-index: 2; } /* above the receipt, which is positioned too */
@@ -84,7 +87,9 @@
     .brand img { width: 28px; height: 28px; }
     .icons { display: flex; gap: 2px; }
     .top .icon { display: flex; padding: 6px; border: none; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
-    .card { margin-top: 8px; } /* fixed under the header, so opening the full bill doesn't move it */
+    /* Centred vertically: auto margins above the card and below the content (the full bill opens in a sheet, so nothing shifts) */
+    .card { margin-top: auto; }
+    .end { margin-top: auto; padding-top: 16px; }
     .icon .sun { display: none; }
     :root[data-theme="dark"] .icon .sun { display: inline; }
     :root[data-theme="dark"] .icon .moon { display: none; }
@@ -103,7 +108,7 @@
     .actions:not(:has(.act:not([hidden]))) { display: none; }
     .act { border: none; padding: 4px 14px; font-weight: 600; font-size: 14px; color: var(--accent); }
     .act:not([hidden]) + .act:not([hidden]) { border-left: 1px solid var(--line); border-radius: 0; }
-    .viewas { margin-top: 14px; font-size: 12px; color: var(--muted); }
+    .viewas { margin-top: 22px; font-size: 12px; color: var(--muted); }
     .viewas .linkish { display: inline; margin: 0; font-size: 12px; }
     .linkish { display: block; margin: 14px auto 0; border: none; padding: 0; font-size: 13px; color: var(--muted); text-decoration: underline; }
     /* "Which one are you?": one row per person, like the cards below */
@@ -204,6 +209,7 @@
     <div class="people-head" id="peoplehead"></div>
     <div id="cards"></div>
   </section>
+  <div class="end"></div>
   <!-- Full bill from your share: the receipt, person by person, in a sheet so the pay card stays put -->
   <div class="sheet-back" id="billsheet" hidden>
     <div class="sheet tall" role="dialog" aria-modal="true" aria-label="Full bill">
@@ -518,10 +524,10 @@
         var box = collapsed ? $("billbody") : $("cards");
         box.textContent = "";
         $("cards").textContent = "";
-        var receipt = el("div", "receipt");
+        var receipt = el("div", "receipt"), rtop = el("div", "r-top"), rscroll = el("div", "r-scroll");
         // A printed bill: name, who paid, each person's part, the total
-        receipt.appendChild(el("div", "r-title", v.note || "Bill split"));
-        receipt.appendChild(el("div", "r-sub", v.everyone.length + " people \u00b7 paid by " + v.everyone[0].name));
+        rtop.appendChild(el("div", "r-title", v.note || "Bill split"));
+        rtop.appendChild(el("div", "r-sub", v.everyone.length + " people \u00b7 paid by " + v.everyone[0].name));
         // Two views of the same receipt: the bill as printed, and who pays what
         var tabs = el("div", "r-tabs"), bill = el("div", "r-body"), split = el("div", "r-body");
         [["Bill", bill], ["Split", split]].forEach(function (t, k) {
@@ -535,7 +541,7 @@
           tabs.appendChild(b);
         });
         split.hidden = true;
-        receipt.appendChild(tabs);
+        rtop.appendChild(tabs);
 
         // Bill: as printed. Items at full price, subtotal, charges
         var line = function (label, amount, cls) {
@@ -585,18 +591,21 @@
           });
           split.appendChild(sec);
         });
-        receipt.appendChild(bill);
-        receipt.appendChild(split);
+        rscroll.appendChild(bill);
+        rscroll.appendChild(split);
         var tot = el("div", "r-total");
         tot.appendChild(el("span", null, "Total"));
         tot.appendChild(el("span", null, money(v.c, billTotal)));
-        receipt.appendChild(tot);
+        rscroll.appendChild(tot);
+        // In the sheet, the heading and tabs stay put while the items scroll
+        receipt.appendChild(rtop);
+        receipt.appendChild(rscroll);
         box.appendChild(receipt);
         var full = $("full");
         full.hidden = !collapsed;
         $("people").hidden = !!collapsed;
         full.textContent = "View full bill";
-        full.onclick = function () { $("billsheet").hidden = false; $("billsheet").querySelector(".sheet").scrollTop = 0; };
+        full.onclick = function () { $("billsheet").hidden = false; var sc = $("billsheet").querySelector(".r-scroll"); if (sc) sc.scrollTop = 0; };
       }
 
       // Changing only the hash keeps the same document, so re-run from scratch for the new link
