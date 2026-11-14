@@ -20,7 +20,7 @@ export const ENGINES = {
   basic: {
     label: "Basic",
     sizeMB: 50,
-    blurb: "Reads the text and picks out items with simple rules. Best on clear, printed bills.",
+    blurb: "Reads the text and picks out items with simple rules.",
     source: "PaddlePaddle's model server and the jsDelivr CDN",
     files: [OCR_MODELS.det.url, OCR_MODELS.rec.url, ...ORT_FILES]
   }

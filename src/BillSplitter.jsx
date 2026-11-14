@@ -385,8 +385,8 @@ function ApiKeySettings({ config, savedKeys = {}, onSave, onCancel, heading = tr
         <input value={model} onChange={e => setModel(e.target.value)} placeholder={`Model ID, e.g. ${p.defaultModel}`} spellCheck={false} autoCapitalize="none" autoFocus style={{ ...inputStyle, marginBottom: 14 }} />
       )}
 
-      <div style={{ fontSize: 12, color: "var(--muted)", background: "var(--surface-2)", borderRadius: 8, padding: "10px 12px", marginBottom: 16, lineHeight: 1.5 }}>
-        <LockIcon size={12} /> The key is encrypted and kept only on this device. It is sent only to {p.label} when you scan a bill.
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", background: "var(--surface-2)", borderRadius: 8, padding: "10px 12px", marginBottom: 16, lineHeight: 1.5 }}>
+        <LockIcon size={12} /><span>The key is encrypted and kept only on this device.</span>
       </div>
 
       {children}
@@ -493,7 +493,7 @@ function LocalEngines({ config, onUse }) {
 
   return (
     <div>
-      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>Free, private, and works offline. Bill photos never leave this device.</div>
+      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>Free, private, and works offline.</div>
       {Object.entries(ENGINES).map(([id, e]) => {
         const inUse = config?.provider === `local-${id}`;
         const busy = progress?.id === id;
