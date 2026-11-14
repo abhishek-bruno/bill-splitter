@@ -103,16 +103,17 @@
           items: list(f[7]).map(function (e) {
             return [e[0], e[1], e[2] ? parseInt(e[2], 36) : everyone, e[3] ? e[3].split(".").map(function (x) { return parseInt(x, 36) || 0; }) : null];
           }),
-          taxes: list(f[8]), paid: f[9] ? parseInt(f[9], 36) : 0
+          taxes: list(f[8]), paid: f[9] ? parseInt(f[9], 36) : 0, byItems: f[10] === "p"
         };
       }
 
-      // Same rules as computeTotals: items split among the people on them, shared charges split among everyone
+      // Same rules as computeTotals: items split among the people on them, shared charges split among
+      // everyone equally, or in proportion to each person's items when the link says so
       function shares(s) {
         var n = s.names.length || 1;
         var taxTotal = s.taxes.reduce(function (t, x) { return t + (Number(x[1]) || 0); }, 0);
         var taxNames = s.taxes.map(function (x) { return String(x[0]); }).join(", ");
-        return s.names.map(function (name, i) {
+        var people = s.names.map(function (name, i) {
           var lines = [], total = 0;
           s.items.forEach(function (it) {
             var m = Number(it[2]) || 0;
@@ -129,9 +130,16 @@
             total += amt;
             lines.push([String(it[0]) + (it[3] && mine > 1 ? " ×" + mine : ""), amt]);
           });
-          if (taxTotal > 0) { total += taxTotal / n; lines.push(["Shared charges (" + taxNames + ")", taxTotal / n]); }
           return { name: name, total: total, lines: lines, paid: !!(s.paid & (1 << i)) };
         });
+        var itemsSum = people.reduce(function (t, p) { return t + p.total; }, 0);
+        people.forEach(function (p) {
+          if (taxTotal <= 0) return;
+          var part = s.byItems && itemsSum > 0 ? taxTotal * p.total / itemsSum : taxTotal / n;
+          p.total += part;
+          p.lines.push(["Shared charges (" + taxNames + ")", part]);
+        });
+        return people;
       }
 
       function money(c, n) { return c + n.toFixed(2); }

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey } from "./vision.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
 import InstallBanner from "./InstallPrompt.jsx";
 import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy, upiRequest, copyText, sharesOf, isUneven } from "./payment.js";
-import { PayQrSheet } from "./GPay.jsx";
+import { PayQrSheet, Sheet } from "./GPay.jsx";
 
 const COLORS = [
   "#6366f1","#f59e0b","#10b981","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f97316"
@@ -14,6 +15,37 @@ function ArrowUpRight({ size = 12 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
       <path d="M7 17 17 7" /><path d="M8 7h9v9" />
+    </svg>
+  );
+}
+
+// Small stroke icons sized to the surrounding text; they replace text symbols like ← → ✓ ▾
+function Icon({ d, size = 14, strokeWidth = 2.4 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, verticalAlign: "-0.15em" }}>
+      <path d={d} />
+    </svg>
+  );
+}
+const ArrowLeftIcon = (props) => <Icon d="M19 12H5M12 19l-7-7 7-7" {...props} />;
+const ArrowRightIcon = (props) => <Icon d="M5 12h14M12 5l7 7-7 7" {...props} />;
+const CheckIcon = (props) => <Icon d="M20 6 9 17l-5-5" {...props} />;
+const ChevronIcon = ({ up, ...props }) => <Icon d={up ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} {...props} />;
+
+// Share (three connected dots) and QR code glyphs for the summary buttons
+function ShareIcon({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+      <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+    </svg>
+  );
+}
+function QrIcon({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" />
+      <path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3" />
     </svg>
   );
 }
@@ -32,13 +64,18 @@ function Avatar({ name, color, size = 32 }) {
   );
 }
 
-function StepBar({ current }) {
-  const labels = ["Bill", "People", "Assign", "Summary"];
+// Earlier steps are buttons that jump back; the current and later ones are plain labels
+function StepBar({ current, onJump }) {
+  const labels = ["Bill", "People", "Assign", "Settle"];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-      {labels.map((l, i) => (
+      {labels.map((l, i) => {
+        const canJump = onJump && i < current;
+        const Step = canJump ? "button" : "div";
+        return (
         <div key={l} style={{ display: "flex", alignItems: "center", flex: i < labels.length - 1 ? 1 : 0 }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+          <Step {...(canJump && { onClick: () => onJump(i), "aria-label": `Back to ${l}`, title: `Back to ${l}` })}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0, fontFamily: "inherit", cursor: canJump ? "pointer" : "default" }}>
             <div style={{
               width: 28, height: 28, borderRadius: "50%",
               background: i <= current ? "var(--accent)" : "var(--border)",
@@ -47,12 +84,13 @@ function StepBar({ current }) {
               fontSize: 12, fontWeight: 700, transition: "all .2s"
             }}>{i + 1}</div>
             <span style={{ fontSize: 10, color: i === current ? "var(--accent)" : "var(--subtle)", fontWeight: 600, whiteSpace: "nowrap" }}>{l}</span>
-          </div>
+          </Step>
           {i < labels.length - 1 && (
             <div style={{ flex: 1, height: 2, background: i < current ? "var(--accent)" : "var(--border)", margin: "0 6px", marginBottom: 18, transition: "all .2s" }} />
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -126,9 +164,71 @@ const FEATURES = [
 function TopBar({ onBack, onReset, hasData }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 24, marginBottom: 16 }}>
-      {onBack ? <button onClick={onBack} style={linkBtn}>← Back</button> : <span />}
+      {onBack ? <button onClick={onBack} style={linkBtn}><ArrowLeftIcon size={16} /> Back</button> : <span />}
       <ResetButton onReset={onReset} hasData={hasData} />
     </div>
+  );
+}
+
+// Secondary Back button beside the primary action in the footer; as wide as its label
+const footerBackBtn = {
+  flex: "0 0 auto", border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)",
+  borderRadius: 10, padding: "12px 16px", fontWeight: 700, cursor: "pointer", fontSize: 15, whiteSpace: "nowrap",
+  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
+};
+
+// Centered yes/no dialog; Escape or a tap outside cancels. Rendered on <body> so the dimmed backdrop
+// also covers the sticky header (which sits in its own stacking layer).
+function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+  return createPortal(
+    <div onClick={onCancel} style={{ position: "fixed", inset: 0, zIndex: 60, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div role="alertdialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={el => el?.focus()} onClick={e => e.stopPropagation()} style={{
+        outline: "none",
+        width: "100%", maxWidth: 340, background: "var(--surface)", color: "var(--text)", borderRadius: 16, padding: "20px 18px 16px", boxShadow: "0 12px 40px #0004"
+      }}>
+        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>{title}</div>
+        <div style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.5, marginBottom: 18 }}>{message}</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onCancel} style={{ flex: 1, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)", borderRadius: 10, padding: 11, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Cancel</button>
+          <button onClick={onConfirm} style={{ flex: 1, border: "none", background: "var(--danger)", color: "#fff", borderRadius: 10, padding: 11, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// Reset (or, on a saved summary, delete) as an icon button at the left of the footer; asks first
+// when there is something to lose
+function FooterReset({ onReset, needsConfirm = true, deletes = false }) {
+  const [asking, setAsking] = useState(false);
+  return (
+    <>
+      <button onClick={() => (needsConfirm ? setAsking(true) : onReset())} aria-label={deletes ? "Delete split" : "Reset split"} title={deletes ? "Delete" : "Reset"} style={{
+        flex: "0 0 48px", border: "1.5px solid var(--danger-border)", background: "var(--surface)", color: "var(--danger)",
+        borderRadius: 10, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          {deletes
+            ? <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" />
+            : <><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></>}
+        </svg>
+      </button>
+      {asking && (
+        <ConfirmModal
+          title={deletes ? "Delete split?" : "Reset split?"}
+          message={deletes ? "Are you sure? It will also be removed from History." : "Are you sure you want to start over?"}
+          confirmLabel={deletes ? "Delete" : "Reset"}
+          onCancel={() => setAsking(false)}
+          onConfirm={() => { setAsking(false); onReset(); }}
+        />
+      )}
+    </>
   );
 }
 
@@ -166,7 +266,7 @@ async function loadVisionConfig() {
   return upgraded;
 }
 
-function ApiKeySettings({ config, onSave, onCancel }) {
+function ApiKeySettings({ config, onSave, onCancel, heading = true, children }) {
   const [provider, setProvider] = useState(config?.provider || "google");
   const [apiKey, setApiKey] = useState(config?.apiKey || "");
   const [model, setModel] = useState(config?.model || PROVIDERS[config?.provider || "google"].defaultModel);
@@ -194,7 +294,7 @@ function ApiKeySettings({ config, onSave, onCancel }) {
 
   return (
     <div>
-      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)", marginBottom: 4 }}>Connect a vision API</div>
+      {heading && <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)", marginBottom: 4 }}>Connect a vision API</div>}
       <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>Use your own key to read bill photos.</div>
 
       <label style={labelStyle}>Provider</label>
@@ -243,17 +343,41 @@ function ApiKeySettings({ config, onSave, onCancel }) {
         🔒 The key is encrypted and kept only on this device. It is sent only to {p.label} when you scan a bill.
       </div>
 
-      <div style={{ display: "flex", gap: 10 }}>
-        <button onClick={onCancel} style={{ flex: 1, border: "1.5px solid var(--border)", background: "var(--surface)", borderRadius: 10, padding: 12, fontWeight: 600, cursor: "pointer", color: "var(--text-2)" }}>Cancel</button>
-        <button onClick={save} disabled={!cleanedKey || keyInvalid || saving} style={{
-          flex: 2, border: "none", borderRadius: 10, padding: 12, fontWeight: 700,
-          background: cleanedKey && !keyInvalid ? "var(--accent)" : "var(--border)", color: cleanedKey && !keyInvalid ? "#fff" : "var(--subtle)",
-          cursor: cleanedKey && !keyInvalid ? "pointer" : "default"
-        }}>{saving ? "Saving…" : "Save key"}</button>
-      </div>
+      {children}
+      {(() => {
+        const actions = (
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={onCancel} style={{ flex: 1, border: "1.5px solid var(--border)", background: "var(--surface)", borderRadius: 10, padding: 12, fontWeight: 600, fontSize: 15, cursor: "pointer", color: "var(--text-2)" }}>Cancel</button>
+            <button onClick={save} disabled={!cleanedKey || keyInvalid || saving} style={{
+              flex: 2, border: "none", borderRadius: 10, padding: 12, fontWeight: 700, fontSize: 15,
+              background: cleanedKey && !keyInvalid ? "var(--accent)" : "var(--border)", color: cleanedKey && !keyInvalid ? "#fff" : "var(--subtle)",
+              cursor: cleanedKey && !keyInvalid ? "pointer" : "default"
+            }}>{saving ? "Saving…" : "Save key"}</button>
+          </div>
+        );
+        return actions;
+      })()}
     </div>
   );
 }
+
+// The key form as a bottom sheet, opened from the scan flow and from Settings
+function ApiKeySheet({ config, onSave, onClose, onRemove }) {
+  return (
+    <Sheet title="Connect a vision API" onClose={onClose}>
+      <ApiKeySettings config={config} onSave={onSave} onCancel={onClose} heading={false}>
+        {config && onRemove && (
+          <button onClick={onRemove} style={{ ...linkBtn, color: "var(--danger)", margin: "0 auto 16px" }}>Remove saved key</button>
+        )}
+      </ApiKeySettings>
+    </Sheet>
+  );
+}
+
+// Small per-device preferences; storage can be unavailable (private mode), so failures are ignored
+const TAX_SPLIT_PREF = "spliteasy:taxSplit";
+const readPref = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+const writePref = (key, value) => { try { localStorage.setItem(key, value); } catch { /* storage unavailable */ } };
 
 function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack }) {
   const [error, setError] = useState("");
@@ -261,10 +385,19 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const [currency, setCurrency] = useState(initial?.currency || "₹");
   const [items, setItems] = useState(() => toRows(initial?.items, "1"));
   const [taxes, setTaxes] = useState(() => toRows(initial?.taxes, "t1"));
+  // "equal" | "proportional". A new bill starts with the last choice made on this device.
+  const [taxSplit, setTaxSplitState] = useState(() => initial?.taxSplit || readPref(TAX_SPLIT_PREF) || "equal");
+  const setTaxSplit = (update) => setTaxSplitState(prev => {
+    const next = typeof update === "function" ? update(prev) : update;
+    writePref(TAX_SPLIT_PREF, next);
+    return next;
+  });
 
   // Photo scanning
   const [apiConfig, setApiConfig] = useState(undefined); // undefined = loading, null = not set
-  const [editingKey, setEditingKey] = useState(false);
+  // Key form sheet: null (closed), "scan" (opened from Scan bill photo: go on to the scanner after saving)
+  // or "change" (opened from the scanner's Change link)
+  const [keySheet, setKeySheet] = useState(null);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [scanned, setScanned] = useState(false);
@@ -289,14 +422,15 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const saveConfig = async (cfg) => {
     await saveSecret("vision", cfg);
     setApiConfig(cfg);
-    setEditingKey(false);
+    if (keySheet === "scan") setMode("upload");
+    setKeySheet(null);
     setError("");
   };
 
   const removeConfig = async () => {
     await deleteSecret("vision");
     setApiConfig(null);
-    setEditingKey(false);
+    setKeySheet(null);
   };
 
   const [lastFile, setLastFile] = useState(null); // kept so a failed scan can be retried without retaking the photo
@@ -356,6 +490,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       currency,
       items: validItems,
       taxes: validTaxes,
+      taxSplit,
       total
     });
   };
@@ -363,12 +498,21 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const formHasData = !!restaurant.trim() || [...items, ...taxes].some(x => x.name.trim() || String(x.amount).trim());
   // Mode changes can come from the browser back button, so reset per-screen state here
   useEffect(() => {
-    setError(""); setEditingKey(false);
+    setError(""); setKeySheet(null);
     if (mode !== "upload") setPreview(null);
   }, [mode]);
 
   const goLanding = onBack;
   const topBar = <TopBar onBack={goLanding} onReset={onReset} hasData={formHasData} />;
+
+  const keySheetEl = keySheet && (
+    <ApiKeySheet config={apiConfig} onSave={saveConfig} onClose={() => setKeySheet(null)} onRemove={removeConfig} />
+  );
+
+  // Reaching the scanner without a key (e.g. a reload on #/bill/scan): back to the start, with the key form open
+  useEffect(() => {
+    if (mode === "upload" && apiConfig === null) { setMode(null); setKeySheet("scan"); }
+  }, [mode, apiConfig]);
 
   // Landing: pick mode
   const scanDefault = !!apiConfig && online;
@@ -403,7 +547,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       </div>
       <StickyFooter bleed>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <button onClick={() => { setMode("upload"); setError(""); }} style={optionStyle(scanDefault)}>
+          <button onClick={() => { setError(""); if (apiConfig === null) setKeySheet("scan"); else setMode("upload"); }} style={optionStyle(scanDefault)}>
             <span style={{ fontSize: 28 }}>🧾</span>
             <span>
               <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: scanDefault ? "var(--accent)" : "var(--text)" }}>Scan bill photo</span>
@@ -423,24 +567,17 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           </button>
         </div>
       </StickyFooter>
+      {keySheetEl}
     </div>
   );
 
   // Upload mode
   if (mode === "upload") {
-    if (apiConfig === undefined) return <div>{topBar}</div>;
-    if (!apiConfig || editingKey) return (
-      <div>
-        {topBar}
-        <ApiKeySettings config={apiConfig} onSave={saveConfig} onCancel={() => apiConfig ? setEditingKey(false) : goLanding()} />
-        {apiConfig && (
-          <button onClick={removeConfig} style={{ ...linkBtn, color: "var(--danger)", margin: "16px auto 0" }}>Remove saved key</button>
-        )}
-      </div>
-    );
+    if (!apiConfig) return <div>{topBar}</div>; // loading, or about to bounce back without a key
     return (
       <div>
         {topBar}
+        {keySheetEl}
         {!online && (
           <div style={{ fontSize: 13, color: "var(--warn-text)", background: "var(--warn-soft)", border: "1px solid var(--warn-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 12 }}>
             You're offline. Scanning needs internet.
@@ -486,7 +623,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
         </div>
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, marginTop: 12, fontSize: 13, color: "var(--subtle)" }}>
           Using {PROVIDERS[apiConfig.provider].label} ·
-          <button onClick={() => setEditingKey(true)} disabled={loading} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 600 }}>Change</button>
+          <button onClick={() => setKeySheet("change")} disabled={loading} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 600 }}>Change</button>
         </div>
         {error && (
           <div style={{ marginTop: 12, color: "var(--danger)", fontSize: 13, background: "var(--danger-soft)", borderRadius: 8, padding: "10px 14px" }}>
@@ -495,7 +632,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
               {lastFile && (
                 <button onClick={() => scanFile(lastFile)} disabled={!online} style={{ color: online ? "var(--accent)" : "var(--subtle)", background: "none", border: "none", cursor: online ? "pointer" : "default", fontWeight: 700, fontSize: 13, padding: 0 }}>↻ Retry</button>
               )}
-              <button onClick={() => { setMode("manual"); setError(""); }} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>Enter manually →</button>
+              <button onClick={() => { setMode("manual"); setError(""); }} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>Enter manually <ArrowRightIcon size={13} /></button>
             </div>
           </div>
         )}
@@ -509,16 +646,24 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const scannedTotal = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0) + taxes.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   return (
     <div className="fill">
-      {topBar}
       {scanned && (
         <div style={{ fontSize: 13, color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>
-          ✓ Scanned. Check the items against the bill (total {currency}{scannedTotal.toFixed(2)}) and fix anything the AI misread.
+          <CheckIcon size={13} /> Scanned. Check the items against the bill (total {currency}{scannedTotal.toFixed(2)}) and fix anything the AI misread.
         </div>
       )}
       <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
         <div style={{ flex: 2 }}>
           <label style={labelStyle}>Restaurant / Place</label>
-          <input value={restaurant} onChange={e => setRestaurant(e.target.value)} placeholder="e.g. Pizza Hut" style={inputStyle} />
+          <div style={{ position: "relative" }}>
+            <input value={restaurant} onChange={e => setRestaurant(e.target.value)} placeholder="e.g. Pizza Hut" style={{ ...inputStyle, paddingRight: restaurant ? 34 : 12 }} />
+            {restaurant && (
+              <button onClick={() => setRestaurant("")} aria-label="Clear restaurant name" title="Clear" style={{
+                position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 24, height: 24,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                background: "none", border: "none", padding: 0, color: "var(--subtle)", cursor: "pointer"
+              }}><Icon d="M18 6 6 18M6 6l12 12" size={14} /></button>
+            )}
+          </div>
         </div>
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>Currency</label>
@@ -557,11 +702,21 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
         width: "100%", marginBottom: 20
       }}>+ Add item</button>
 
-      <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
-        Shared Charges
-        <span style={{ fontWeight: 400, fontSize: 12, color: "var(--subtle)", marginLeft: 6 }}>(tax, service charge, etc.)</span>
+      {/* Heading, with how shared charges are divided at the right end: one tap switches */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+        <span style={{ fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Shared Charges</span>
+        {/* The hint gives way first on narrow screens */}
+        <span style={{ flex: 1, fontSize: 12, color: "var(--subtle)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>(tax, service, etc.)</span>
+        <button
+          onClick={() => setTaxSplit(v => (v === "proportional" ? "equal" : "proportional"))}
+          aria-label={taxSplit === "proportional" ? "Split proportionally. Tap to split equally" : "Split equally. Tap to split proportionally"}
+          title={taxSplit === "proportional" ? "Tap to split equally" : "Tap to split in proportion to what each person had"}
+          style={{ flexShrink: 0, background: "none", border: "none", padding: 0, fontSize: 12, fontWeight: 600, fontFamily: "inherit", color: "var(--accent)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}
+        >
+          <span style={{ fontWeight: 400, color: "var(--subtle)" }}>Split</span> {taxSplit === "proportional" ? "proportionally" : "equally"}
+          <Icon d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" size={11} />
+        </button>
       </div>
-      <div style={{ fontSize: 12, color: "var(--subtle)", marginBottom: 10 }}>These will be split equally among everyone</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
         {taxes.map(tax => (
           <div key={tax.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -593,15 +748,19 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       {error && <div style={{ color: "var(--danger)", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
       <StickyFooter bleed>
+        <div style={{ display: "flex", gap: 8 }}>
+        <FooterReset onReset={onReset} needsConfirm={formHasData} />
+        <button onClick={goLanding} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
         <button onClick={submitManual} disabled={!manualValid} style={{
-          width: "100%", border: "none",
+          flex: 2, border: "none", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
           background: manualValid ? "var(--accent)" : "var(--border)",
           color: manualValid ? "#fff" : "var(--subtle)",
           borderRadius: 10, padding: 13, fontWeight: 700,
           cursor: manualValid ? "pointer" : "default", fontSize: 15, transition: "all .2s"
         }}>
-          Continue with these items →
+          Add people <ArrowRightIcon size={16} />
         </button>
+        </div>
       </StickyFooter>
     </div>
   );
@@ -755,7 +914,7 @@ function AssignStep({ bill, people, assignments, setAssignments }) {
                 <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14 }}>{item.name}</span>
                 {canExpand && (
                   <button onClick={toggleOpen} aria-expanded={!!expanded} style={{ background: "none", border: "none", padding: 0, fontSize: 12, lineHeight: "22px", fontWeight: 600, color: "var(--accent)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>
-                    {uneven ? "Split unevenly" : "Split evenly"} {expanded ? "▴" : "▾"}
+                    {uneven ? "Split unevenly" : "Split evenly"} <ChevronIcon up={expanded} size={12} />
                   </button>
                 )}
                 <span style={{ fontWeight: 700, fontSize: 15, whiteSpace: "nowrap" }}>{bill.currency}{item.amount.toFixed(2)}</span>
@@ -815,7 +974,7 @@ function AssignStep({ bill, people, assignments, setAssignments }) {
       </div>
       {bill.taxes?.length > 0 && (
         <>
-          <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Shared Charges <span style={{ fontWeight: 400, fontSize: 12, color: "var(--subtle)" }}>(split equally)</span></div>
+          <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Shared Charges <span style={{ fontWeight: 400, fontSize: 12, color: "var(--subtle)" }}>{bill.taxSplit === "proportional" ? "(split proportionally)" : "(split equally)"}</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {bill.taxes.map(t => (
               <div key={t.id} style={{ display: "flex", justifyContent: "space-between", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px" }}>
@@ -831,16 +990,23 @@ function AssignStep({ bill, people, assignments, setAssignments }) {
 }
 
 // ── Totals & dates ────────────────────────────────────────────────────────────
+// Shared charges are split equally, or (bill.taxSplit === "proportional") in proportion to what each person had
 function computeTotals(bill, people, assignments) {
-  const perPersonShared = (bill.taxes?.reduce((s, t) => s + t.amount, 0) || 0) / (people.length || 1);
-  return people.map(p => {
+  const taxTotal = bill.taxes?.reduce((s, t) => s + t.amount, 0) || 0;
+  const withItems = people.map(p => {
     let itemTotal = 0;
     bill.items?.forEach(item => {
       const assigned = assignments[item.id] || [];
       const n = sharesOf(assigned, p.id); // one entry per share; usually 1
       if (n) itemTotal += item.amount * n / assigned.length;
     });
-    return { ...p, itemTotal, shared: perPersonShared, total: itemTotal + perPersonShared };
+    return { ...p, itemTotal };
+  });
+  const itemsSum = withItems.reduce((s, p) => s + p.itemTotal, 0);
+  const byItems = bill.taxSplit === "proportional" && itemsSum > 0;
+  return withItems.map(p => {
+    const shared = byItems ? taxTotal * p.itemTotal / itemsSum : taxTotal / (people.length || 1);
+    return { ...p, shared, total: p.itemTotal + shared };
   });
 }
 
@@ -855,8 +1021,9 @@ const paidStatus = (entry) => {
   return { paidCount, total: debtors.length, settled: debtors.length > 0 && paidCount === debtors.length };
 };
 
-// Tiny icon button that copies an amount (just the number), shown right under it
-function MiniCopy({ value, color = "var(--subtle)", label }) {
+// An amount you can tap to copy (just the number, for pasting into a UPI app). A small "Copied" pill
+// floats above it briefly, so nothing around it shifts.
+function CopyAmount({ value, display, label, style }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     await copyText(value);
@@ -864,15 +1031,16 @@ function MiniCopy({ value, color = "var(--subtle)", label }) {
     setTimeout(() => setCopied(false), 1200);
   };
   return (
-    <button onClick={copy} aria-label={copied ? "Copied" : `Copy ${label || value}`} title={copied ? "Copied" : "Copy amount"} style={{
-      display: "inline-flex", alignItems: "center", background: "none", border: "none", padding: 2,
-      color, opacity: copied ? 1 : 0.75, fontSize: 10, fontWeight: 600, cursor: "pointer", lineHeight: 1
+    <button onClick={copy} aria-label={copied ? "Copied" : `Copy ${label}`} title="Tap to copy" style={{
+      position: "relative", background: "none", border: "none", padding: 0, cursor: "copy", fontFamily: "inherit", color: "inherit", ...style
     }}>
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        {copied
-          ? <path d="M5 12l5 5L20 7" />
-          : <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>}
-      </svg>
+      {display}
+      {copied && (
+        <span style={{
+          position: "absolute", bottom: "100%", left: "50%", transform: "translate(-50%, -4px)", whiteSpace: "nowrap",
+          fontSize: 11, fontWeight: 700, color: "#fff", background: "#111c", borderRadius: 6, padding: "2px 7px", pointerEvents: "none"
+        }}><CheckIcon size={10} /> Copied</span>
+      )}
     </button>
   );
 }
@@ -880,6 +1048,30 @@ function MiniCopy({ value, color = "var(--subtle)", label }) {
 // ── Step 4: Summary ───────────────────────────────────────────────────────────
 function SummaryStep({ bill, people, assignments, payment, onOpenSettings, savedAt, paid = {}, onTogglePaid }) {
   const totals = computeTotals(bill, people, assignments);
+  // Expanded cards: "bill" for the top card (full breakdown), or person ids (their own lines)
+  const [open, setOpen] = useState({});
+  const toggle = (key) => setOpen(prev => ({ ...prev, [key]: !prev[key] }));
+  // Tapping a card (not its buttons) opens or closes it
+  const cardTap = (key) => (e) => { if (!e.target.closest("button, a")) toggle(key); };
+  // One person's lines, worded like their pay page: item name (×n when they had more than one of an
+  // unevenly split item) and their share, then shared charges
+  const linesFor = (p) => {
+    const lines = [];
+    bill.items?.forEach(item => {
+      const assigned = assignments[item.id] || [];
+      const n = sharesOf(assigned, p.id);
+      if (!n) return;
+      lines.push({ label: item.name, note: isUneven(assigned) && n > 1 ? `×${n}` : "", amount: item.amount * n / assigned.length });
+    });
+    if (p.shared > 0) lines.push({ label: `Shared charges (${bill.taxes.map(t => t.name).join(", ")})`, note: "", amount: p.shared });
+    return lines;
+  };
+  const lineRow = (key, label, note, amount, color) => (
+    <div key={key} style={{ display: "flex", gap: 10, padding: "5px 0", fontSize: 13, color }}>
+      <span style={{ flex: 1, minWidth: 0 }}>{label}{note && <span style={{ opacity: 0.6 }}> {note}</span>}</span>
+      <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{bill.currency}{amount.toFixed(2)}</span>
+    </div>
+  );
 
   const [status, setStatus] = useState({}); // person id -> "shared" | "copied"
   const sharePayment = async (p) => {
@@ -905,107 +1097,155 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
   return (
     <div>
       {qrRequest && <PayQrSheet person={qrPerson} request={qrRequest} onClose={() => setQrPerson(null)} />}
-      <div style={{ background: "linear-gradient(135deg, var(--accent), #8b5cf6)", borderRadius: 14, padding: "18px 20px", marginBottom: 20, color: "#fff" }}>
-        <div style={{ fontSize: 13, opacity: 0.8 }}>{bill.restaurant}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-          <div style={{ fontSize: 28, fontWeight: 800 }}>{bill.currency}{bill.total?.toFixed(2)}</div>
-          <MiniCopy value={bill.total?.toFixed(2)} color="#fff" label="bill total" />
-        </div>
-        <div style={{ fontSize: 13, opacity: 0.75, marginTop: 4 }}>{people.length} people · {bill.items?.length} items</div>
-        {savedAt && <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>✓ Saved to history · {formatDateTime(savedAt)}</div>}
-      </div>
-      {people.length > 1 && (
-        <button onClick={shareGroup} style={{
-          width: "100%", marginTop: -8, marginBottom: 20, borderRadius: 10, padding: 11, fontWeight: 700, fontSize: 14, cursor: "pointer",
-          border: `1.5px solid ${groupStatus ? "var(--success)" : "var(--accent)"}`,
-          background: groupStatus ? "var(--success-soft)" : "var(--surface)", color: groupStatus ? "var(--success-text)" : "var(--accent)"
-        }}>
-          {groupStatus === "copied" ? "✓ Summary copied" : groupStatus === "shared" ? "✓ Shared" : "Share summary with group"}
-        </button>
-      )}
-      <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Each person owes</div>
+      {(() => {
+        // Who still owes: everyone after the payer, minus those marked paid
+        const debtors = totals.slice(1);
+        const toCollect = debtors.reduce((t, p) => t + p.total, 0);
+        const left = debtors.filter(p => !paid[p.id]).reduce((t, p) => t + p.total, 0);
+        const paidCount = debtors.filter(p => paid[p.id]).length;
+        const date = savedAt && new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(savedAt);
+        return (
+          <div onClick={cardTap("bill")} style={{ background: "linear-gradient(135deg, var(--accent), #8b5cf6)", borderRadius: 14, padding: "16px 18px", marginBottom: 20, color: "#fff", cursor: "pointer" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bill.restaurant || "Bill"}</div>
+              {date && <div title={formatDateTime(savedAt)} style={{ fontSize: 12, opacity: 0.8, whiteSpace: "nowrap" }}>{date}</div>}
+              <button onClick={() => toggle("bill")} aria-expanded={!!open.bill} aria-label={open.bill ? "Hide full breakdown" : "Show full breakdown"} style={{ background: "none", border: "none", padding: 2, color: "#fff", opacity: 0.85, cursor: "pointer", display: "inline-flex" }}>
+                <ChevronIcon up={open.bill} size={16} />
+              </button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+              <CopyAmount value={bill.total?.toFixed(2)} display={`${bill.currency}${bill.total?.toFixed(2)}`} label="bill total" style={{ fontSize: 30, fontWeight: 800, color: "#fff" }} />
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.85 }}>
+              Paid by {totals[0]?.name} · {people.length} people
+            </div>
+            {debtors.length > 0 && toCollect > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ height: 6, borderRadius: 3, background: "#ffffff40", overflow: "hidden" }}>
+                  <div style={{ width: `${((toCollect - left) / toCollect) * 100}%`, height: "100%", background: "#fff", borderRadius: 3, transition: "width .3s" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.9, marginTop: 6 }}>
+                  <span>{left > 0 ? `${bill.currency}${left.toFixed(2)} left to collect` : "All settled"}</span>
+                  <span>{paidCount} of {debtors.length} paid</span>
+                </div>
+              </div>
+            )}
+            {/* Full breakdown: every item with who had it, then shared charges */}
+            {open.bill && (
+              <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid #ffffff40" }}>
+                {bill.items?.map(item => {
+                  const assigned = assignments[item.id] || [];
+                  const names = people.filter(p => assigned.includes(p.id)).map(p => isUneven(assigned) ? `${p.name} ×${sharesOf(assigned, p.id)}` : p.name);
+                  return lineRow(item.id, item.name, `· ${names.join(", ") || "unassigned"}`, item.amount, "#fff");
+                })}
+                {bill.taxes?.map(t => lineRow(`tax-${t.id}`, t.name, bill.taxSplit === "proportional" ? "· proportional" : "· everyone", t.amount, "#fff"))}
+              </div>
+            )}
+            {/* With one person to collect from, their own share button says the same thing */}
+            {debtors.length > 1 && (
+              <button onClick={shareGroup} style={{
+                width: "100%", marginTop: 14, borderRadius: 10, padding: 11, fontWeight: 700, fontSize: 14, cursor: "pointer", border: "none",
+                background: "#fff", color: groupStatus ? "var(--success-text)" : "var(--accent)",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6
+              }}>
+                {groupStatus ? <><CheckIcon size={15} /> {groupStatus === "copied" ? "Summary copied" : "Shared"}</> : <><ShareIcon /> Share summary with group</>}
+              </button>
+            )}
+          </div>
+        );
+      })()}
+      <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Each person's share</div>
       {supportsUpi(bill) && !payment?.upiId && people.length > 1 && (
         <div style={{ fontSize: 13, color: "var(--muted)", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 14px", marginBottom: 12 }}>
           Add your UPI ID so shared links get a UPI pay button.{" "}
-          <button onClick={onOpenSettings} style={{ background: "none", border: "none", padding: 0, color: "var(--accent)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Add UPI ID →</button>
+          <button onClick={onOpenSettings} style={{ background: "none", border: "none", padding: 0, color: "var(--accent)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Add UPI ID <ArrowRightIcon size={13} /></button>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {totals.map((p, i) => (
-          <div key={p.id} style={{ border: `1.5px solid ${p.color}33`, borderRadius: 14, padding: "14px 16px", background: "var(--surface)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <div key={p.id} onClick={cardTap(p.id)} style={{ border: `1.5px solid ${p.color}33`, borderRadius: 14, padding: "14px 16px", background: "var(--surface)", cursor: "pointer" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <Avatar name={p.name} color={p.color} size={36} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700 }}>{p.name}</div>
                 {i === 0 && <div style={{ fontSize: 11, color: "var(--muted)" }}>Payer</div>}
-                {i > 0 && paid[p.id] && <div style={{ fontSize: 11, color: "var(--success-text)", fontWeight: 600 }}>Paid · {formatDateTime(paid[p.id])}</div>}
+                {/* Paid status lives under the name: a link to mark it, and the date with an undo once paid */}
+                {i > 0 && paid[p.id] && (
+                  <div style={{ fontSize: 11, lineHeight: "16px", height: 16, color: "var(--success-text)", fontWeight: 600 }}>
+                    <span title={formatDateTime(paid[p.id])}><CheckIcon size={11} /> Paid {new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(paid[p.id])}</span>
+                    {onTogglePaid && <> · <button onClick={() => onTogglePaid(p.id)} style={{ background: "none", border: "none", padding: 0, fontSize: 11, lineHeight: "inherit", color: "var(--subtle)", cursor: "pointer", textDecoration: "underline", fontFamily: "inherit", verticalAlign: "baseline" }}>Undo</button></>}
+                  </div>
+                )}
+                {i > 0 && !paid[p.id] && onTogglePaid && (
+                  <button onClick={() => onTogglePaid(p.id)} style={{ display: "block", background: "none", border: "none", padding: 0, fontSize: 11, lineHeight: "16px", height: 16, fontWeight: 600, color: "var(--accent)", cursor: "pointer", fontFamily: "inherit" }}>Mark as paid</button>
+                )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <div style={{ fontWeight: 800, fontSize: 20, color: p.color }}>{bill.currency}{p.total.toFixed(2)}</div>
-                <MiniCopy value={p.total.toFixed(2)} label={`${p.name}'s amount`} />
+                <CopyAmount value={p.total.toFixed(2)} display={`${bill.currency}${p.total.toFixed(2)}`} label={`${p.name}'s amount`} style={{ fontWeight: 800, fontSize: 20, color: p.color }} />
+                <button onClick={() => toggle(p.id)} aria-expanded={!!open[p.id]} aria-label={open[p.id] ? `Hide ${p.name}'s items` : `Show ${p.name}'s items`} style={{ background: "none", border: "none", padding: 2, color: "var(--subtle)", cursor: "pointer", display: "inline-flex" }}>
+                  <ChevronIcon up={open[p.id]} size={16} />
+                </button>
               </div>
             </div>
-            <div style={{ fontSize: 12, color: "var(--subtle)", display: "flex", gap: 16 }}>
-              <span>Items: {bill.currency}{p.itemTotal.toFixed(2)}</span>
-              <span>+Shared: {bill.currency}{p.shared.toFixed(2)}</span>
-            </div>
-            {i > 0 && (
+            {open[p.id] && (
+              <div style={{ marginTop: 10, paddingTop: 6, borderTop: "1px solid var(--divider)" }}>
+                {linesFor(p).map((l, k) => lineRow(k, l.label, l.note, l.amount, "var(--text-2)"))}
+              </div>
+            )}
+            {/* Nothing left to do once they've paid; Undo lives next to the paid date */}
+            {i > 0 && !paid[p.id] && (
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button onClick={() => sharePayment(p)} style={{
                 flex: 2,
-                background: status[p.id] ? "var(--success)" : p.color,
+                background: status[p.id] ? "var(--success)" : "var(--accent)",
                 color: "#fff", border: "none", borderRadius: 8, padding: "8px",
-                fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "background .2s"
+                fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "background .2s",
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
               }}>
-                {status[p.id] === "copied" ? "✓ Copied to clipboard" : status[p.id] === "shared" ? "✓ Shared" : "Share payment details"}
+                {status[p.id] ? <><CheckIcon size={15} /> {status[p.id] === "copied" ? "Copied to clipboard" : "Shared"}</> : <><ShareIcon /> Share payment details</>}
               </button>
-              {!paid[p.id] && upiRequest({ bill, person: p, people, payment }) && (
+              {upiRequest({ bill, person: p, people, payment }) && (
                 <button onClick={() => setQrPerson(p)} aria-label={`Show UPI QR for ${p.name}`} title="Show QR to scan and pay" style={{
-                  borderRadius: 8, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: "pointer",
-                  border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)"
-                }}>QR</button>
-              )}
-              {onTogglePaid && (
-                <button onClick={() => onTogglePaid(p.id)} style={{
-                  flex: 1, borderRadius: 8, padding: 8, fontWeight: 600, fontSize: 13, cursor: "pointer",
-                  border: `1.5px solid ${paid[p.id] ? "var(--success)" : "var(--border)"}`,
-                  background: paid[p.id] ? "var(--success-soft)" : "var(--surface)",
-                  color: paid[p.id] ? "var(--success-text)" : "var(--text-2)"
-                }}>{paid[p.id] ? "✓ Paid" : "Mark paid"}</button>
+                  flex: 1, borderRadius: 8, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: "pointer",
+                  border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
+                }}><QrIcon /> Show QR</button>
               )}
               </div>
             )}
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 20, background: "var(--surface-2)", borderRadius: 12, padding: "14px 16px", fontSize: 13, color: "var(--muted)" }}>
-        <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>Full breakdown</div>
-        {bill.items?.map(item => {
-          const assigned = assignments[item.id] || [];
-          const names = people.filter(p => assigned.includes(p.id)).map(p => {
-            const n = sharesOf(assigned, p.id);
-            return isUneven(assigned) ? `${p.name} ×${n}` : p.name;
-          });
-          return (
-            <div key={item.id} style={{ display: "flex", justifyContent: "space-between", paddingBottom: 4, marginBottom: 4, borderBottom: "1px solid var(--divider)" }}>
-              <span>{item.name} <span style={{ opacity: 0.6 }}>({names.join(", ") || "unassigned"})</span></span>
-              <span>{bill.currency}{item.amount.toFixed(2)}</span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
 
 // ── History ───────────────────────────────────────────────────────────────────
-function HistoryList({ history, onOpen, onClose }) {
+// Long-press a split to start selecting; while selecting, taps toggle instead of opening
+function HistoryList({ history, onOpen, onClose, selected, setSelected }) {
+  const selecting = selected.length > 0;
+  const press = useRef(null); // { timer, x, y, fired }
+  const toggle = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const startPress = (id, e) => {
+    clearTimeout(press.current?.timer);
+    press.current = { x: e.clientX, y: e.clientY, fired: false, timer: setTimeout(() => {
+      press.current.fired = true;
+      if (!selected.includes(id)) toggle(id);
+      navigator.vibrate?.(15);
+    }, 450) };
+  };
+  const cancelPress = () => clearTimeout(press.current?.timer);
+  // A finger that moves (scrolling) isn't a long-press
+  const movePress = (e) => {
+    const p = press.current;
+    if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) clearTimeout(p.timer);
+  };
+  const tap = (id) => {
+    if (press.current?.fired) { press.current.fired = false; return; } // the long-press already handled it
+    if (selecting) toggle(id); else onOpen(id);
+  };
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: "var(--text)" }}>History</div>
-        <button onClick={onClose} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 700, fontSize: 14 }}>Close</button>
-      </div>
+    <div className="fill">
       {history.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 14, padding: "32px 0" }}>
           Splits are saved here automatically when you reach the summary.
@@ -1014,11 +1254,24 @@ function HistoryList({ history, onOpen, onClose }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {history.map(entry => {
           const { paidCount, total, settled } = paidStatus(entry);
+          const isSel = selected.includes(entry.id);
           return (
-            <button key={entry.id} onClick={() => onOpen(entry.id)} style={{
-              display: "flex", alignItems: "center", gap: 12, textAlign: "left", width: "100%",
-              border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", background: "var(--surface)", cursor: "pointer"
-            }}>
+            <button key={entry.id} onClick={() => tap(entry.id)}
+              onPointerDown={e => startPress(entry.id, e)} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerMove={movePress}
+              onContextMenu={e => e.preventDefault()} aria-pressed={selecting ? isSel : undefined}
+              style={{
+                display: "flex", alignItems: "center", gap: 12, textAlign: "left", width: "100%",
+                // The tick circle shows selection; the row itself stays as it is
+                border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px",
+                background: "var(--surface)", cursor: "pointer",
+                userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none"
+              }}>
+              {selecting && (
+                <span aria-hidden="true" style={{
+                  width: 22, height: 22, borderRadius: 11, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  border: `2px solid ${isSel ? "var(--accent)" : "var(--border-strong)"}`, background: isSel ? "var(--accent)" : "transparent", color: "#fff"
+                }}>{isSel && <CheckIcon size={12} strokeWidth={3} />}</span>
+              )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.bill.restaurant}</div>
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{formatDateTime(entry.createdAt)} · {entry.people.length} people</div>
@@ -1040,15 +1293,17 @@ function HistoryList({ history, onOpen, onClose }) {
 
 function HistoryDetail({ entry, payment, onBack, onDelete, onTogglePaid, onOpenSettings }) {
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 24, marginBottom: 16 }}>
-        <button onClick={onBack} style={linkBtn}>← History</button>
-        <ConfirmButton label="Delete" prompt="Delete this split?" onConfirm={onDelete} />
-      </div>
+    <div className="fill">
       <SummaryStep
         bill={entry.bill} people={entry.people} assignments={entry.assignments} payment={payment}
         savedAt={entry.createdAt} paid={entry.paid} onTogglePaid={onTogglePaid} onOpenSettings={onOpenSettings}
       />
+      <StickyFooter bleed>
+        <div style={{ display: "flex", gap: 8 }}>
+          <FooterReset onReset={onDelete} deletes />
+          <button onClick={onBack} style={{ ...footerBackBtn, flex: 1 }}><ArrowLeftIcon size={16} /> History</button>
+        </div>
+      </StickyFooter>
     </div>
   );
 }
@@ -1118,7 +1373,7 @@ function PaymentSettings({ payment, setPayment, flash }) {
   );
 }
 
-function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNames, setSavedNames, payment, setPayment, historyCount, onClearHistory, theme, setTheme, focus, onFocused }) {
+function SettingsPage({ onClose, onKeyChanged, onEraseAll, savedNames, setSavedNames, payment, setPayment, theme, setTheme, focus, onFocused }) {
   // Opened from a shortcut (e.g. Saved > Manage): jump to that section once
   useEffect(() => {
     if (!focus) return;
@@ -1149,12 +1404,6 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
     flash("API key removed.");
   };
 
-  const clearSplit = () => {
-    if (!window.confirm("Clear the current bill, people and assignments?")) return;
-    onClearSplit();
-    flash("Current split cleared.");
-  };
-
   const eraseAll = async () => {
     if (!window.confirm("Erase all SplitEasy data on this device, including history, saved people, your UPI ID and the API key? This can't be undone.")) return;
     await clearAllSecrets();
@@ -1165,14 +1414,10 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
   };
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div style={{ fontWeight: 800, fontSize: 18, color: "var(--text)" }}>Settings</div>
-        <button onClick={onClose} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 700, fontSize: 14 }}>Close</button>
-      </div>
+    <div className="fill">
 
       {notice && (
-        <div style={{ fontSize: 13, color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>✓ {notice}</div>
+        <div style={{ fontSize: 13, color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}><CheckIcon size={13} /> {notice}</div>
       )}
 
       <div style={sectionTitle}>Install app</div>
@@ -1199,9 +1444,8 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
 
       <div style={sectionTitle}>Bill scanning API key</div>
       <div style={card}>
-        {config === undefined ? null : editing ? (
-          <ApiKeySettings config={config} onSave={saveKey} onCancel={() => setEditing(false)} />
-        ) : config ? (
+        {editing && <ApiKeySheet config={config} onSave={saveKey} onClose={() => setEditing(false)} />}
+        {config === undefined ? null : config ? (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 6 }}>
               <span style={{ color: "var(--muted)" }}>Provider</span>
@@ -1253,17 +1497,11 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
         <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>
           Your split in progress, history, saved people, UPI ID and API key are stored only in this browser. Nothing is uploaded except bill photos you choose to scan.
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <button onClick={clearSplit} style={outlineBtn()}>Clear current split</button>
-          <button onClick={() => { if (window.confirm(`Delete all ${historyCount} saved splits?`)) { onClearHistory(); flash("History cleared."); } }}
-            disabled={!historyCount} style={{ ...outlineBtn(historyCount ? "var(--text-2)" : "var(--subtle)"), cursor: historyCount ? "pointer" : "default" }}>
-            Clear history{historyCount ? ` (${historyCount})` : ""}
-          </button>
-          <button onClick={eraseAll} style={{ ...outlineBtn("#fff", "var(--danger)"), background: "var(--danger)" }}>Erase all app data</button>
-        </div>
+        {/* Clearing the current split lives in the split's footer; clearing history on the History page */}
+        <button onClick={eraseAll} style={{ ...outlineBtn("#fff", "var(--danger)"), background: "var(--danger)", width: "100%" }}>Erase all app data</button>
       </div>
       {/* Which build this device is running; handy when an installed app hasn't picked up an update yet */}
-      <div style={{ textAlign: "center", fontSize: 11, color: "var(--subtle)", marginTop: 16 }}>Build {__APP_BUILD__}</div>
+      <div style={{ textAlign: "center", fontSize: 11, color: "var(--subtle)", margin: "16px 0" }}>Build {__APP_BUILD__}</div>
     </div>
   );
 }
@@ -1368,7 +1606,23 @@ export default function BillSplitter() {
   const initialRoute = useRef(parseRoute(location.hash)).current;
   const [view, setView] = useState(initialRoute.view); // "split" | "settings" | "history"
   const [settingsFocus, setSettingsFocus] = useState(null); // section id to scroll to when Settings opens
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false);
+  const [selectedHistory, setSelectedHistory] = useState([]); // ids picked by long-press on the History list
+  const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
+  useEffect(() => {
+    if (!selectedHistory.length) return;
+    const onKey = (e) => e.key === "Escape" && setSelectedHistory([]);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedHistory.length]);
+  const deleteSelectedHistory = () => {
+    setHistory(prev => prev.filter(e => !selectedHistory.includes(e.id)));
+    if (selectedHistory.includes(splitId)) resetSplit(); // otherwise the open summary would re-save it
+    setSelectedHistory([]);
+  };
   const [openEntryId, setOpenEntryId] = useState(initialRoute.openEntryId ?? null);
+  // Leaving the list (or opening a split) ends selection
+  useEffect(() => { if (view !== "history" || openEntryId) setSelectedHistory([]); }, [view, openEntryId]);
   const [billMode, setBillMode] = useState( // null | "upload" | "manual"
     initialRoute.billMode !== undefined ? initialRoute.billMode : (bill ? "manual" : null)
   );
@@ -1413,6 +1667,12 @@ export default function BillSplitter() {
     if (paid[personId]) delete paid[personId]; else paid[personId] = Date.now();
     return { ...e, paid };
   }));
+
+  // Summary footer: delete the saved split and start fresh
+  const deleteCurrentSplit = () => {
+    if (splitId) setHistory(prev => prev.filter(e => e.id !== splitId));
+    resetSplit();
+  };
 
   const deleteEntry = (entryId) => {
     setHistory(prev => prev.filter(e => e.id !== entryId));
@@ -1468,6 +1728,14 @@ export default function BillSplitter() {
     else { replaceNext.current = true; fallback(); }
   };
 
+  // Footer Back always goes to the previous step (not just the last screen visited), replacing the
+  // current history entry so browser Back doesn't bounce forward again. People goes back to editing the bill.
+  const prevStep = () => {
+    replaceNext.current = true;
+    if (step === 1) setBillMode("manual");
+    setStep(step - 1);
+  };
+
   const currentEntry = history.find(e => e.id === splitId);
   const openEntry = history.find(e => e.id === openEntryId);
 
@@ -1498,7 +1766,18 @@ export default function BillSplitter() {
           borderBottom: `1px solid ${scrolled ? "var(--divider)" : "transparent"}`
         }}>
           <div style={{ fontWeight: 800, fontSize: 20, color: "var(--text)", marginBottom: view === "split" ? 14 : 0, display: "flex", alignItems: "center", gap: 8, minHeight: 34 }}>
-            <img src="pizza.svg" alt="" width="28" height="28" style={{ flexShrink: 0 }} /> SplitEasy
+            {/* History and Settings show their own name here instead of the app name */}
+            <img src="pizza.svg" alt="" width="28" height="28" style={{ flexShrink: 0 }} /> {view === "history" ? (selectedHistory.length ? `${selectedHistory.length} selected` : "History") : view === "settings" ? "Settings" : "SplitEasy"}
+            {/* Delete sits by the title, well away from × on the right */}
+            {selectedHistory.length > 0 ? (
+              <HeaderIcon label="Delete selected" onClick={() => setConfirmDeleteSelected(true)}>
+                <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" />
+              </HeaderIcon>
+            ) : view === "history" && !openEntryId && history.length > 0 && (
+              <HeaderIcon label="Clear all history" onClick={() => setConfirmClearHistory(true)}>
+                <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" />
+              </HeaderIcon>
+            )}
             {view === "split" && (
               <div style={{ marginLeft: "auto", display: "flex", gap: 2 }}>
                 <HeaderIcon label={isDark ? "Switch to light mode" : "Switch to dark mode"} onClick={() => setTheme(isDark ? "light" : "dark")}>
@@ -1515,14 +1794,45 @@ export default function BillSplitter() {
                 </HeaderIcon>
               </div>
             )}
+            {/* History and Settings: an × in the title bar, same as Close in the footer
+                (from a saved split it leaves History altogether) */}
+            {view !== "split" && (
+              <div style={{ marginLeft: "auto", display: "flex" }}>
+                <HeaderIcon label={selectedHistory.length ? "Cancel selection" : `Close ${view === "history" ? "History" : "Settings"}`} onClick={() => {
+                  if (selectedHistory.length) { setSelectedHistory([]); return; }
+                  if (view === "history" && openEntryId) { replaceNext.current = true; setOpenEntryId(null); setView("split"); }
+                  else goBack(() => setView("split"));
+                }}>
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </HeaderIcon>
+              </div>
+            )}
           </div>
-          {view === "split" && <StepBar current={step} />}
+          {confirmDeleteSelected && (
+            <ConfirmModal
+              title={`Delete ${selectedHistory.length} ${selectedHistory.length === 1 ? "split" : "splits"}?`}
+              message="Are you sure? They will be removed from History."
+              confirmLabel="Delete"
+              onCancel={() => setConfirmDeleteSelected(false)}
+              onConfirm={() => { setConfirmDeleteSelected(false); deleteSelectedHistory(); }}
+            />
+          )}
+          {confirmClearHistory && (
+            <ConfirmModal
+              title="Clear all history?"
+              message={`Are you sure? All ${history.length} saved ${history.length === 1 ? "split" : "splits"} will be deleted.`}
+              confirmLabel="Clear"
+              onCancel={() => setConfirmClearHistory(false)}
+              onConfirm={() => { setConfirmClearHistory(false); setHistory([]); setSplitId(null); }}
+            />
+          )}
+          {view === "split" && <StepBar current={step} onJump={i => { if (i === 0) setBillMode("manual"); setStep(i); }} />}
           {/* home page only: floats just below the header */}
           {view === "split" && step === 0 && !billMode && <InstallBanner toast />}
         </div>
 
         {view === "history" && (
-          <div style={{ padding: "16px 24px 24px" }}>
+          <div className="fill" style={{ padding: "16px 24px 24px" }}>
             {openEntry ? (
               <HistoryDetail
                 entry={openEntry} payment={payment}
@@ -1532,28 +1842,26 @@ export default function BillSplitter() {
                 onOpenSettings={() => setView("settings")}
               />
             ) : (
-              <HistoryList history={history} onOpen={setOpenEntryId} onClose={() => goBack(() => setView("split"))} />
+              <HistoryList history={history} onOpen={setOpenEntryId} onClose={() => goBack(() => setView("split"))}
+                selected={selectedHistory} setSelected={setSelectedHistory} />
             )}
           </div>
         )}
 
         {view === "settings" && (
-          <div style={{ padding: "16px 24px 24px" }}>
+          <div className="fill" style={{ padding: "16px 24px 24px" }}>
             <SettingsPage
               focus={settingsFocus}
               onFocused={() => setSettingsFocus(null)}
               onClose={() => goBack(() => setView("split"))}
               onKeyChanged={() => setKeyVersion(v => v + 1)}
-              onClearSplit={resetSplit}
               onEraseAll={eraseAll}
               savedNames={savedNames}
               setSavedNames={setSavedNames}
               payment={payment}
               setPayment={setPayment}
-              historyCount={history.length}
               theme={theme}
               setTheme={setTheme}
-              onClearHistory={() => { setHistory([]); setSplitId(null); }}
             />
           </div>
         )}
@@ -1563,9 +1871,8 @@ export default function BillSplitter() {
         <div className="fill" style={{ padding: "16px 24px 24px" }}>
           {step === 0 && <BillStep
             key={resetCount} initial={bill} keyVersion={keyVersion} onReset={resetSplit}
-            mode={billMode} setMode={setBillMode} onBack={() => goBack(() => setBillMode(null))}
+            mode={billMode} setMode={setBillMode} onBack={() => { replaceNext.current = true; setBillMode(null); }}
             onDone={parsed => { setBill(parsed); setStep(1); }} />}
-          {step >= 1 && <TopBar onBack={() => goBack(() => { if (step === 1) setBillMode("manual"); setStep(step - 1); })} onReset={resetSplit} hasData />}
           {step === 1 && <PeopleStep people={people} setPeople={setPeople} bill={bill} savedNames={savedNames} setSavedNames={setSavedNames}
             onManageSaved={() => { setSettingsFocus("saved-people"); setView("settings"); }} />}
           {step === 2 && <AssignStep bill={bill} people={people} assignments={assignments} setAssignments={setAssignments} />}
@@ -1579,24 +1886,32 @@ export default function BillSplitter() {
 
         {step >= 1 && step < 3 && (
           <StickyFooter>
+            <div style={{ display: "flex", gap: 8 }}>
+            <FooterReset onReset={resetSplit} />
+            <button onClick={prevStep} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
             <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} style={{
-              width: "100%", border: "none",
+              flex: 2, border: "none",
               background: canNext() ? "var(--accent)" : "var(--border)",
               color: canNext() ? "#fff" : "var(--subtle)",
               borderRadius: 10, padding: 12, fontWeight: 700,
-              cursor: canNext() ? "pointer" : "default", fontSize: 15, transition: "all .2s", whiteSpace: "nowrap"
+              cursor: canNext() ? "pointer" : "default", fontSize: 15, transition: "all .2s", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
             }}>
-              {step === 2 ? "See Summary →" : "Next →"}
+              {step === 2 ? "Settle up" : "Assign items"} <ArrowRightIcon size={16} />
             </button>
+            </div>
           </StickyFooter>
         )}
 
         {step === 3 && (
           <StickyFooter>
+            <div style={{ display: "flex", gap: 8 }}>
+            <FooterReset onReset={currentEntry ? deleteCurrentSplit : resetSplit} deletes={!!currentEntry} />
+            <button onClick={prevStep} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
             <button onClick={resetSplit} style={{
-              width: "100%", border: "none", background: "var(--accent)",
+              flex: 2, border: "none", background: "var(--accent)",
               borderRadius: 10, padding: 12, fontWeight: 700, cursor: "pointer", fontSize: 15, color: "#fff"
             }}>Start New Split</button>
+            </div>
           </StickyFooter>
         )}
         </div>

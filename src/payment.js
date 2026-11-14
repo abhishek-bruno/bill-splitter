@@ -68,7 +68,7 @@ const publicBase = () => import.meta.env.VITE_PUBLIC_URL || (location.protocol =
 // The whole split packed as small as possible for the URL hash (never sent to the server).
 // Plain text with control-character separators (no JSON quotes or brackets), then base64url:
 //   fields  (RS \x1e): version, place, currency ("" = ₹), payee ("" = first person), upiId, recipientIdx ("-" = group),
-//                      names, items, charges, paidMask
+//                      names, items, charges, paidMask, chargeSplit ("p" = in proportion to items)
 //   lists   (GS \x1d): one entry per name / item / charge
 //   parts   (US \x1f): item = name, amount, peopleMask ("" = everyone), shares (only when uneven: base36
 //                      counts for the masked people in list order, joined by "."); charge = name, amount
@@ -99,7 +99,8 @@ function packSplit({ bill, person, assignments, people, payment, paid = {} }) {
       return parts.join(US);
     }).join(GS),
     (bill.taxes || []).map(t => [clean(t.name), t.amount].join(US)).join(GS),
-    (mask(Object.keys(paid).filter(id => paid[id])) || "").toString(36)
+    (mask(Object.keys(paid).filter(id => paid[id])) || "").toString(36),
+    bill.taxSplit === "proportional" ? "p" : ""
   ];
   while (fields.length && fields[fields.length - 1] === "") fields.pop();
   const bytes = new TextEncoder().encode(fields.join(RS));

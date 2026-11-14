@@ -1,16 +1,18 @@
 // PayQrSheet: a UPI QR for one person's share, to scan with any UPI app at the table
 import { useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import qrcode from "qrcode-generator";
 import { upiLink } from "./payment.js";
 
-function Sheet({ title, onClose, children }) {
+export function Sheet({ title, onClose, children }) {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // On <body> so the backdrop also covers the sticky header
+  return createPortal(
     <div onClick={onClose} style={{
       position: "fixed", inset: 0, zIndex: 50, background: "#0008",
       display: "flex", alignItems: "flex-end", justifyContent: "center"
@@ -27,7 +29,8 @@ function Sheet({ title, onClose, children }) {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -55,13 +58,13 @@ function QrCode({ value, size = 240 }) {
 
 export function PayQrSheet({ person, request, onClose }) {
   return (
-    <Sheet title={`${person.name} pays you`} onClose={onClose}>
+    <Sheet title="Scan to pay" onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
         <div style={{ fontSize: 32, fontWeight: 800 }}>₹{request.amount.toFixed(2)}</div>
         <div style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 16px" }}>to {request.payeeName} · {request.upiId}</div>
         <QrCode value={upiLink(request)} />
         <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 16, maxWidth: 300 }}>
-          Ask {person.name} to scan this with any UPI app.
+          Works with any UPI app.
         </div>
       </div>
     </Sheet>

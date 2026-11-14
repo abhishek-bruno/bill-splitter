@@ -35,6 +35,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; background: var(--surface); color: var(--text); -webkit-text-size-adjust: 100%; }
+/* On body (not just the app shell) so dialogs rendered straight onto <body> use it too */
+body { font-family: 'Inter', -apple-system, sans-serif; }
 /* the sticky header and footer handle the top and bottom insets themselves */
 body { padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
 button, input, select { font: inherit; }
