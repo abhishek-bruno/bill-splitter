@@ -7,13 +7,22 @@ const money = (currency, n) => `${currency}${n.toFixed(2)}`;
 // UPI only settles in INR, so links are offered only for rupee bills
 export const supportsUpi = (bill) => bill.currency === "₹";
 
+// An item's assignment lists a person once per share: [a, a, a, b] means a had 3 of 4 shares.
+// Plain lists with no repeats are the usual even split.
+export const sharesOf = (assigned, id) => assigned.filter(x => x === id).length;
+export const isUneven = (assigned) => new Set(assigned).size !== assigned.length;
+
 // What one person owes, line by line: their share of each item plus their part of shared charges
 function shareLines({ bill, person, assignments }) {
   const lines = [];
   bill.items.forEach(item => {
     const assigned = assignments[item.id] || [];
-    if (!assigned.includes(person.id)) return;
-    lines.push({ label: item.name, amount: item.amount / assigned.length, total: item.amount, ways: assigned.length });
+    const n = sharesOf(assigned, person.id);
+    if (!n) return;
+    lines.push({
+      label: item.name, amount: item.amount * n / assigned.length, total: item.amount,
+      ways: new Set(assigned).size, uneven: isUneven(assigned), shares: n, of: assigned.length
+    });
   });
   if (person.shared > 0) {
     lines.push({ label: `Shared charges (${bill.taxes.map(t => t.name).join(", ")})`, amount: person.shared, ways: 1 });
@@ -25,7 +34,8 @@ function shareLines({ bill, person, assignments }) {
 function itemLines(args) {
   const c = args.bill.currency;
   return shareLines(args).map(l => {
-    const split = l.ways > 1 ? ` (${money(c, l.total)} split ${l.ways} ways)` : "";
+    const split = l.uneven ? ` (${l.shares} of ${l.of} shares of ${money(c, l.total)})`
+      : l.ways > 1 ? ` (${money(c, l.total)} split ${l.ways} ways)` : "";
     return `• ${l.label}: ${money(c, l.amount)}${split}`;
   });
 }
@@ -60,7 +70,8 @@ const publicBase = () => import.meta.env.VITE_PUBLIC_URL || (location.protocol =
 //   fields  (RS \x1e): version, place, currency ("" = ₹), payee ("" = first person), upiId, recipientIdx ("-" = group),
 //                      names, items, charges, paidMask
 //   lists   (GS \x1d): one entry per name / item / charge
-//   parts   (US \x1f): item = name, amount, peopleMask ("" = everyone); charge = name, amount
+//   parts   (US \x1f): item = name, amount, peopleMask ("" = everyone), shares (only when uneven: base36
+//                      counts for the masked people in list order, joined by "."); charge = name, amount
 // Masks are base36 bitmasks over the names list. Trailing empty fields are dropped.
 // pay.html decodes this and recomputes every share the same way computeTotals does.
 const RS = "\x1e", GS = "\x1d", US = "\x1f";
@@ -81,7 +92,12 @@ function packSplit({ bill, person, assignments, people, payment, paid = {} }) {
     hasUpi(bill, payment) ? payment.upiId : "",
     person ? String(idx.get(person.id) ?? 0) : "-",
     people.map(p => clean(p.name)).join(GS),
-    bill.items.map(i => [clean(i.name), i.amount, maskField(mask(assignments[i.id] || []))].join(US)).join(GS),
+    bill.items.map(i => {
+      const assigned = assignments[i.id] || [];
+      const parts = [clean(i.name), i.amount, maskField(mask(assigned))];
+      if (isUneven(assigned)) parts.push(people.filter(p => assigned.includes(p.id)).map(p => sharesOf(assigned, p.id).toString(36)).join("."));
+      return parts.join(US);
+    }).join(GS),
     (bill.taxes || []).map(t => [clean(t.name), t.amount].join(US)).join(GS),
     (mask(Object.keys(paid).filter(id => paid[id])) || "").toString(36)
   ];

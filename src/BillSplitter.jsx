@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey } from "./vision.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
 import InstallBanner from "./InstallPrompt.jsx";
-import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy, upiRequest, copyText } from "./payment.js";
+import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy, upiRequest, copyText, sharesOf, isUneven } from "./payment.js";
 import { PayQrSheet } from "./GPay.jsx";
 
 const COLORS = [
@@ -641,10 +641,17 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames, onMana
         }}>Add</button>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {people.map(p => (
+        {people.map((p, i) => (
           <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--surface)", border: "1px solid var(--divider)", borderRadius: 10, padding: "10px 14px" }}>
             <Avatar name={p.name} color={p.color} />
-            <span style={{ flex: 1, fontWeight: 600 }}>{p.name}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontWeight: 600 }}>{p.name}</span>
+              {/* The first person is the payer everywhere (summary, messages, pay page) */}
+              {i === 0
+                ? <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>Payer</span>
+                // Move them to the front; assignments are keyed by id, so order changes are safe
+                : <button onClick={() => setPeople(prev => [p, ...prev.filter(x => x.id !== p.id)])} style={{ display: "block", background: "none", border: "none", padding: 0, fontSize: 11, color: "var(--accent)", cursor: "pointer", fontFamily: "inherit" }}>Set as payer</button>}
+            </span>
             <button onClick={() => setPeople(prev => prev.filter(x => x.id !== p.id))} aria-label={`Remove ${p.name}`} style={{ background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
           </div>
         ))}
@@ -673,10 +680,13 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames, onMana
 
 // ── Step 3: Assign ────────────────────────────────────────────────────────────
 function AssignStep({ bill, people, assignments, setAssignments }) {
+  // An item's list holds one entry per share ([a, a, b] = a had 2 of 3), so "selected" means "appears at all"
+  const addMissing = (cur) => [...cur, ...people.map(p => p.id).filter(id => !cur.includes(id))];
+
   // Assign everyone to every item in one tap, so people can then just be deselected where they didn't share
   const everyoneOnAll = bill.items.every(item => people.every(p => (assignments[item.id] || []).includes(p.id)));
-  const toggleEveryoneOnAll = () => setAssignments(
-    Object.fromEntries(bill.items.map(item => [item.id, everyoneOnAll ? [] : people.map(p => p.id)]))
+  const toggleEveryoneOnAll = () => setAssignments(prev =>
+    Object.fromEntries(bill.items.map(item => [item.id, everyoneOnAll ? [] : addMissing(prev[item.id] || [])]))
   );
   const toggle = (itemId, personId) => {
     setAssignments(prev => {
@@ -684,6 +694,15 @@ function AssignStep({ bill, people, assignments, setAssignments }) {
       return { ...prev, [itemId]: cur.includes(personId) ? cur.filter(x => x !== personId) : [...cur, personId] };
     });
   };
+  const setShares = (itemId, personId, n) => setAssignments(prev => {
+    const cur = prev[itemId] || [];
+    return { ...prev, [itemId]: [...cur.filter(x => x !== personId), ...Array(Math.max(1, n)).fill(personId)] };
+  });
+  const makeEven = (itemId) => setAssignments(prev => ({ ...prev, [itemId]: [...new Set(prev[itemId] || [])] }));
+
+  const [open, setOpen] = useState({}); // item id -> share counts expanded
+  const stepBtn = { width: 26, height: 26, borderRadius: 13, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)", cursor: "pointer", fontSize: 15, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -696,15 +715,25 @@ function AssignStep({ bill, people, assignments, setAssignments }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
         {bill.items?.map(item => {
           const assigned = assignments[item.id] || [];
-          const perPerson = assigned.length > 0 ? (item.amount / assigned.length).toFixed(2) : null;
+          const onItem = people.filter(p => assigned.includes(p.id));
+          const uneven = isUneven(assigned);
+          const canExpand = onItem.length > 1;
+          const expanded = open[item.id] && canExpand;
+          const toggleOpen = () => setOpen(prev => ({ ...prev, [item.id]: !prev[item.id] }));
           return (
-            <div key={item.id} style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", background: "var(--surface)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 14 }}>{item.name}</span>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 700 }}>{bill.currency}{item.amount.toFixed(2)}</div>
-                  {perPerson && <div style={{ fontSize: 11, color: "var(--muted)" }}>{bill.currency}{perPerson}/person</div>}
-                </div>
+            // Tapping the card (anywhere but its buttons) opens or closes the share counts
+            <div key={item.id} onClick={e => { if (canExpand && !e.target.closest("button, [data-shares]")) toggleOpen(); }}
+              style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px", background: "var(--surface)", cursor: canExpand ? "pointer" : "default" }}>
+              {/* One header line: name, then the split toggle next to the price */}
+              {/* Same line height for all three so their first lines sit level, even when the name wraps */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8, lineHeight: "22px" }}>
+                <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14 }}>{item.name}</span>
+                {canExpand && (
+                  <button onClick={toggleOpen} aria-expanded={!!expanded} style={{ background: "none", border: "none", padding: 0, fontSize: 12, lineHeight: "22px", fontWeight: 600, color: "var(--accent)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>
+                    {uneven ? "Split unevenly" : "Split evenly"} {expanded ? "▴" : "▾"}
+                  </button>
+                )}
+                <span style={{ fontWeight: 700, fontSize: 15, whiteSpace: "nowrap" }}>{bill.currency}{item.amount.toFixed(2)}</span>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {people.map(p => (
@@ -718,19 +747,42 @@ function AssignStep({ bill, people, assignments, setAssignments }) {
                     transition: "all .15s"
                   }}>
                     <Avatar name={p.name} color={p.color} size={20} />
-                    {p.name}
+                    {p.name}{uneven && assigned.includes(p.id) ? ` ×${sharesOf(assigned, p.id)}` : ""}
                   </button>
                 ))}
                 {(() => {
                   const allSelected = people.every(p => assigned.includes(p.id));
                   return (
-                    <button onClick={() => setAssignments(prev => ({ ...prev, [item.id]: allSelected ? [] : people.map(p => p.id) }))} style={{
+                    <button onClick={() => setAssignments(prev => ({ ...prev, [item.id]: allSelected ? [] : addMissing(prev[item.id] || []) }))} style={{
                       border: "2px dashed var(--border-strong)", background: "none", borderRadius: 20,
                       padding: "4px 12px", cursor: "pointer", fontSize: 12, color: "var(--subtle)"
                     }}>{allSelected ? "None" : "All"}</button>
                   );
                 })()}
               </div>
+              {expanded && (
+                <div data-shares style={{ marginTop: 10, borderTop: "1px solid var(--divider)", paddingTop: 8, cursor: "default" }}>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>How many did each person have?</div>
+                  {onItem.map(p => {
+                    const n = sharesOf(assigned, p.id);
+                    return (
+                      <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
+                        <Avatar name={p.name} color={p.color} size={26} />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>{p.name}</span>
+                          <span style={{ display: "block", fontSize: 12, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{bill.currency}{(item.amount * n / assigned.length).toFixed(2)}</span>
+                        </span>
+                        <button onClick={() => setShares(item.id, p.id, n - 1)} disabled={n <= 1} aria-label={`Fewer for ${p.name}`} style={{ ...stepBtn, opacity: n <= 1 ? 0.4 : 1, cursor: n <= 1 ? "default" : "pointer" }}>−</button>
+                        <span style={{ minWidth: 18, textAlign: "center", fontWeight: 700, fontSize: 14 }}>{n}</span>
+                        <button onClick={() => setShares(item.id, p.id, n + 1)} aria-label={`More for ${p.name}`} style={stepBtn}>+</button>
+                      </div>
+                    );
+                  })}
+                  {uneven && (
+                    <button onClick={() => makeEven(item.id)} style={{ background: "none", border: "none", padding: "6px 0 0", fontSize: 11, color: "var(--subtle)", cursor: "pointer", textDecoration: "underline" }}>Split evenly again</button>
+                  )}
+                </div>
+              )}
               {assigned.length === 0 && <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 6 }}>⚠ No one assigned</div>}
             </div>
           );
@@ -760,7 +812,8 @@ function computeTotals(bill, people, assignments) {
     let itemTotal = 0;
     bill.items?.forEach(item => {
       const assigned = assignments[item.id] || [];
-      if (assigned.includes(p.id)) itemTotal += item.amount / assigned.length;
+      const n = sharesOf(assigned, p.id); // one entry per share; usually 1
+      if (n) itemTotal += item.amount * n / assigned.length;
     });
     return { ...p, itemTotal, shared: perPersonShared, total: itemTotal + perPersonShared };
   });
@@ -859,7 +912,7 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
               <Avatar name={p.name} color={p.color} size={36} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700 }}>{p.name}</div>
-                {i === 0 && <div style={{ fontSize: 11, color: "var(--muted)" }}>Paid the bill</div>}
+                {i === 0 && <div style={{ fontSize: 11, color: "var(--muted)" }}>Payer</div>}
                 {i > 0 && paid[p.id] && <div style={{ fontSize: 11, color: "var(--success-text)", fontWeight: 600 }}>Paid · {formatDateTime(paid[p.id])}</div>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -904,7 +957,10 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
         <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>Full breakdown</div>
         {bill.items?.map(item => {
           const assigned = assignments[item.id] || [];
-          const names = assigned.map(id => people.find(p => p.id === id)?.name).filter(Boolean);
+          const names = people.filter(p => assigned.includes(p.id)).map(p => {
+            const n = sharesOf(assigned, p.id);
+            return isUneven(assigned) ? `${p.name} ×${n}` : p.name;
+          });
           return (
             <div key={item.id} style={{ display: "flex", justifyContent: "space-between", paddingBottom: 4, marginBottom: 4, borderBottom: "1px solid var(--divider)" }}>
               <span>{item.name} <span style={{ opacity: 0.6 }}>({names.join(", ") || "unassigned"})</span></span>

@@ -100,7 +100,9 @@
         return {
           note: f[1] ? f[1] + " bill" : "", c: (f[2] || "₹").slice(0, 4), payee: f[3] || names[0],
           upi: f[4] || "", me: f[5] === "-" ? -1 : Number(f[5]) || 0, names: names,
-          items: list(f[7]).map(function (e) { return [e[0], e[1], e[2] ? parseInt(e[2], 36) : everyone]; }),
+          items: list(f[7]).map(function (e) {
+            return [e[0], e[1], e[2] ? parseInt(e[2], 36) : everyone, e[3] ? e[3].split(".").map(function (x) { return parseInt(x, 36) || 0; }) : null];
+          }),
           taxes: list(f[8]), paid: f[9] ? parseInt(f[9], 36) : 0
         };
       }
@@ -115,11 +117,17 @@
           s.items.forEach(function (it) {
             var m = Number(it[2]) || 0;
             if (!(m & (1 << i))) return;
-            var ways = 0;
-            for (var k = 0; k < s.names.length; k++) if (m & (1 << k)) ways++;
-            var amt = (Number(it[1]) || 0) / ways;
+            // Shares per masked person (in list order) when split unevenly, otherwise one each
+            var mine = 1, all = 0, rank = 0;
+            for (var k = 0; k < s.names.length; k++) {
+              if (!(m & (1 << k))) continue;
+              var w = it[3] ? it[3][rank] || 0 : 1;
+              if (k === i) mine = w;
+              all += w; rank++;
+            }
+            var amt = all ? (Number(it[1]) || 0) * mine / all : 0;
             total += amt;
-            lines.push([String(it[0]), amt]);
+            lines.push([String(it[0]) + (it[3] && mine > 1 ? " ×" + mine : ""), amt]);
           });
           if (taxTotal > 0) { total += taxTotal / n; lines.push(["Shared charges (" + taxNames + ")", taxTotal / n]); }
           return { name: name, total: total, lines: lines, paid: !!(s.paid & (1 << i)) };
@@ -201,7 +209,7 @@
           var row = el("div", "person");
           var top = el("div", "row");
           var who = el("span", null, p.name);
-          if (i === 0) who.appendChild(el("span", "tag", "paid the bill"));
+          if (i === 0) who.appendChild(el("span", "tag", "payer"));
           else if (p.paid) who.appendChild(el("span", "tag ok", "✓ paid"));
           top.appendChild(who);
           top.appendChild(el("span", null, money(v.c, p.total)));
