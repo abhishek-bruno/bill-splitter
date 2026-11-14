@@ -720,6 +720,121 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const removeTax = (id) => setTaxes(prev => prev.length > 1 ? prev.filter(x => x.id !== id) : [blankItem()]);
   const updateTax = (id, field, val) => setTaxes(prev => prev.map(x => x.id === id ? { ...x, [field]: val } : x));
 
+  // Long-press a row to drag it: reorder it, or drop it in the other list (an item that is really a charge,
+  // like a service charge the scanner read as an item, or the other way round)
+  const listRefs = { item: useRef(null), tax: useRef(null) };
+  const [drag, setDrag] = useState(null); // { from, id, dy, to, index, lineTop }
+  const dragRef = useRef(null);
+
+  const scrollerOf = (el) => {
+    for (let n = el?.parentElement; n; n = n.parentElement) {
+      const oy = getComputedStyle(n).overflowY;
+      if ((oy === "auto" || oy === "scroll") && n.scrollHeight > n.clientHeight) return n;
+    }
+    return document.scrollingElement;
+  };
+
+  // Which list the finger is over (the nearest one), and where among its other rows the row would land
+  const dropTarget = (y, id) => {
+    let best = null, bestDist = Infinity;
+    for (const k of ["item", "tax"]) {
+      const el = listRefs[k].current;
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const dist = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+      if (dist < bestDist) { bestDist = dist; best = { k, el }; }
+    }
+    const rows = [...best.el.querySelectorAll("[data-drag-row]")].filter(el => el.dataset.dragRow !== id);
+    let index = rows.findIndex(el => { const r = el.getBoundingClientRect(); return y < r.top + r.height / 2; });
+    if (index === -1) index = rows.length;
+    const lineTop = !rows.length ? 0 : index < rows.length ? rows[index].offsetTop - 5 : rows[rows.length - 1].offsetTop + rows[rows.length - 1].offsetHeight + 3;
+    return { to: best.k, index, lineTop };
+  };
+
+  // Long-press a row (not the field being typed in, so its own long-press for select/paste still works).
+  // Moving the finger before the press completes cancels it, so the page scrolls as usual.
+  const pressRow = (e, from, id) => {
+    if (e.button > 0 || dragRef.current) return;
+    if (e.currentTarget.contains(document.activeElement) && e.target === document.activeElement) return;
+    const x0 = e.clientX, y0 = e.clientY;
+    const off = () => { clearTimeout(timer); window.removeEventListener("pointermove", early); window.removeEventListener("pointerup", off); window.removeEventListener("pointercancel", off); };
+    const early = (ev) => { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) off(); };
+    const timer = setTimeout(() => { off(); beginDrag(from, id, y0); }, 400);
+    window.addEventListener("pointermove", early);
+    window.addEventListener("pointerup", off);
+    window.addEventListener("pointercancel", off);
+  };
+
+  const beginDrag = (from, id, y) => {
+    document.activeElement?.blur?.();
+    window.getSelection?.()?.removeAllRanges();
+    const scroller = scrollerOf(listRefs.item.current);
+    const onMove = (ev) => { if (dragRef.current) dragRef.current.y = ev.clientY; };
+    const onUp = () => endDrag(true);
+    const onCancel = () => endDrag(false);
+    // While dragging, the finger moves the row, not the page; and lifting it doesn't tap the field below
+    const block = (ev) => ev.cancelable && ev.preventDefault();
+    const listeners = [["pointermove", onMove], ["pointerup", onUp], ["pointercancel", onCancel], ["touchmove", block], ["touchend", block], ["contextmenu", block]];
+    listeners.forEach(([t, fn]) => window.addEventListener(t, fn, { passive: false }));
+    const d = { from, id, startY: y, y, scroller, startScroll: scroller.scrollTop, cleanup: () => listeners.forEach(([t, fn]) => window.removeEventListener(t, fn)) };
+    dragRef.current = d;
+    navigator.vibrate?.(10);
+    document.body.style.userSelect = "none";
+    const tick = () => {
+      const cur = dragRef.current;
+      if (!cur) return;
+      // Scroll when held near the top, or near the footer at the bottom
+      const edge = cur.y < 90 ? -1 : cur.y > window.innerHeight - 160 ? 1 : 0;
+      if (edge) cur.scroller.scrollTop += edge * 8;
+      const dy = cur.y - cur.startY + (cur.scroller.scrollTop - cur.startScroll);
+      setDrag({ from, id, dy, ...dropTarget(cur.y, id) });
+      cur.raf = requestAnimationFrame(tick);
+    };
+    tick();
+  };
+  const endDrag = (commit) => {
+    const d = dragRef.current;
+    if (!d) return;
+    cancelAnimationFrame(d.raf);
+    d.cleanup();
+    dragRef.current = null;
+    document.body.style.userSelect = "";
+    const target = commit ? dropTarget(d.y, d.id) : null;
+    setDrag(null);
+    if (!target) return;
+    const src = d.from === "item" ? items : taxes;
+    const row = src.find(r => r.id === d.id);
+    if (!row) return;
+    if (target.to === "item" && parseFloat(row.amount) < 0) return; // a discount can't be an item
+    const blank = (r) => !r.name.trim() && !String(r.amount).trim();
+    if (target.to === d.from) {
+      const rest = src.filter(r => r.id !== d.id);
+      rest.splice(target.index, 0, row);
+      (d.from === "item" ? setItems : setTaxes)(rest);
+    } else {
+      const moved = { id: row.id, name: row.name, amount: row.amount };
+      const rest = src.filter(r => r.id !== d.id);
+      (d.from === "item" ? setItems : setTaxes)(rest.length ? rest : [blankItem()]);
+      (target.to === "item" ? setItems : setTaxes)(prev => {
+        const list = prev.length === 1 && blank(prev[0]) ? [] : [...prev];
+        list.splice(Math.min(target.index, list.length), 0, moved);
+        return list;
+      });
+    }
+  };
+  // Style for a row while dragged (follows the finger) and for a list the row would move into
+  const dragRowStyle = (id) => drag?.id === id ? {
+    transform: `translateY(${drag.dy}px) scale(1.02)`, position: "relative", zIndex: 5,
+    background: "var(--surface)", borderRadius: 10, boxShadow: "0 8px 24px #0002", opacity: 0.97
+  } : null;
+  const dropListStyle = (kind) => ({
+    position: "relative", borderRadius: 10, transition: "background .15s, box-shadow .15s",
+    ...(drag && drag.to === kind && drag.from !== kind && { background: "var(--accent-soft)", boxShadow: "0 0 0 6px var(--accent-soft)" })
+  });
+  const dropLine = (kind) => drag && drag.to === kind && (
+    <div style={{ position: "absolute", left: 0, right: 0, top: drag.lineTop, height: 2, borderRadius: 1, background: "var(--accent)", pointerEvents: "none" }} />
+  );
+
   const submitManual = () => {
     const validItems = items.filter(i => i.name.trim() && parseFloat(i.amount) > 0)
       .map(i => ({ ...i, name: i.name.trim(), amount: parseFloat(i.amount) }));
@@ -918,9 +1033,10 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
         </div>
       </div>
       <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Items</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+      <div ref={listRefs.item} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8, ...dropListStyle("item") }}>
+        {dropLine("item")}
         {items.map((item, idx) => (
-          <div key={item.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div key={item.id} data-drag-row={item.id} onPointerDown={e => pressRow(e, "item", item.id)} style={{ display: "flex", gap: 8, alignItems: "center", WebkitTouchCallout: "none", ...dragRowStyle(item.id) }}>
             <input
               value={item.name} onChange={e => updateItem(item.id, "name", e.target.value)}
               placeholder={`Item ${idx + 1} name`} data-row-name={item.id}
@@ -947,9 +1063,10 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       }}>+ Add item</button>
 
       <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Shared Charges</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+      <div ref={listRefs.tax} style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8, ...dropListStyle("tax") }}>
+        {dropLine("tax")}
         {taxes.map(tax => (
-          <div key={tax.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div key={tax.id} data-drag-row={tax.id} onPointerDown={e => pressRow(e, "tax", tax.id)} style={{ display: "flex", gap: 8, alignItems: "center", WebkitTouchCallout: "none", ...dragRowStyle(tax.id) }}>
             <input
               value={tax.name} onChange={e => updateTax(tax.id, "name", e.target.value)}
               placeholder={`e.g. GST, Service Charge`} data-row-name={tax.id}
