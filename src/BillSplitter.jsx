@@ -181,7 +181,7 @@ const FEATURES = [
       "Friends don't need the app. They get a link with their share and a UPI button."
     ],
     icon: <><circle cx="9" cy="7" r="4" /><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" /><path d="M17 8l5 5M22 8l-5 5" /></> },
-  { title: "Free", // gift box
+  { title: "Free forever", // gift box
     points: [
       "No ads, no subscription, no limits.",
       "On Device AI scanning is free. Cloud AI uses your own key, and Google Gemini has a free tier."
@@ -1743,22 +1743,23 @@ function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, o
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.group ? `Group · paid by ${r.payee}` : `To ${r.payee}`} · {new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                {r.payer ? "You paid the bill" : r.share != null ? `${r.who} · to ${r.payee}` : `Paid by ${r.payee}`} · {new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
               </div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
-              {/* A group link shows the bill total until the reader marks their own row, then their share */}
+              {/* Every request is a whole split: once we know who the reader is (always on a personal link,
+                  picked on a group link) it shows their share and whether it's paid; otherwise the bill total */}
               {(() => {
-                const mine = r.group ? r.paid && r.share != null : true;
-                const done = r.paid || r.paidByPayer;
+                const known = r.share != null;
+                const done = r.payer || r.paid || r.paidByPayer;
                 return (
                   <>
-                    <div style={{ fontWeight: 700, color: "var(--text)" }}>{r.c}{Number(mine && r.group ? r.share : r.amount).toFixed(2)}</div>
-                    {mine && (
+                    <div style={{ fontWeight: 700, color: "var(--text)" }}>{r.c}{Number(known && !r.payer ? r.share : r.amount).toFixed(2)}</div>
+                    {known && (
                       <div style={{
                         display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 700, borderRadius: 10, padding: "2px 8px",
                         background: done ? "var(--success-soft)" : "var(--warn-soft)", color: done ? "var(--success-text)" : "var(--warn-text)"
-                      }}>{done ? "Paid" : "To pay"}</div>
+                      }}>{r.payer ? "You paid" : done ? "Paid" : "To pay"}</div>
                     )}
                   </>
                 );

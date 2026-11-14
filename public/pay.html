@@ -34,40 +34,57 @@
       background: var(--bg); color: var(--text); font-family: -apple-system, "Inter", system-ui, sans-serif; }
     .card { width: 100%; max-width: 380px; background: var(--card); border-radius: 20px; padding: 28px 24px; text-align: center;
       box-shadow: 0 4px 32px #0001; }
-    .label { color: var(--muted); font-size: 14px; }
-    .amount { font-size: 40px; font-weight: 800; margin: 6px 0 4px; }
-    .to { font-size: 15px; margin-bottom: 4px; }
-    .note { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+    /* One heavy element (the amount): context above it, a qualifier below */
+    .label { font-size: 16px; font-weight: 600; }
+    .note { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 2px; } /* the bill's description, under its name */
+    .note:empty { display: none; }
+    .to:empty { margin-bottom: 14px; }
+    /* Share view: the bill on top, then a divider, then whose share and the amount */
+    .sharehead { margin: 16px -24px 0; padding-top: 16px; border-top: 1px solid var(--line); font-size: 11px; font-weight: 700;
+      letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+    .amount { font-size: 40px; font-weight: 800; margin: 4px 0 2px; letter-spacing: -.5px; }
+    .to { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 20px; }
     .pay { display: block; background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; font-size: 16px;
       border-radius: 12px; padding: 14px; }
-    .id { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 13px; color: var(--muted); }
-    .id code { display: block; font-size: 15px; color: var(--text); margin: 6px 0 10px; word-break: break-all; }
+    .id { margin-top: 12px; font-size: 13px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; }
+    .id code { font-size: 13px; color: var(--text); word-break: break-all; }
+    .copy { border: none; padding: 4px; color: var(--accent); display: inline-flex; border-radius: 6px; }
     button { font: inherit; background: none; border: 1.5px solid var(--line); color: var(--text); border-radius: 10px; padding: 8px 14px; cursor: pointer; }
     .error { color: #ef4444; }
-    .items { list-style: none; padding: 0; margin: 0 0 24px; text-align: left; border-top: 1px solid var(--line); }
-    .items li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-    .items li span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
     .hint { color: var(--muted); font-size: 13px; margin: 0; }
     .gpay { background: #1a73e8; margin-bottom: 10px; }
-    .pay.small { display: inline-block; font-size: 13px; padding: 6px 12px; border-radius: 8px; margin-top: 8px; }
-    .toggle { width: 100%; margin-top: 16px; font-weight: 600; font-size: 14px; color: var(--accent); }
-    .split { margin-top: 16px; text-align: left; }
-    .split .sum { color: var(--muted); font-size: 13px; text-align: center; margin-bottom: 8px; }
-    .person { padding: 10px 0; border-bottom: 1px solid var(--line); }
-    .person:last-child { border-bottom: none; }
-    .person .row { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; font-weight: 600; }
-    .person .row span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .person .tag { font-weight: 500; font-size: 12px; color: var(--muted); margin-left: 6px; }
-    .person .tag.ok { color: #16a34a; }
-    .person .lines { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .payrow { display: flex; gap: 8px; }
+    .payrow .pay { flex: 1; }
+    .qrbtn { flex: 0 0 50px; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 12px; color: var(--accent); }
+    .sheet-back { position: fixed; inset: 0; z-index: 50; background: #0008; display: flex; align-items: flex-end; justify-content: center; animation: fade .18s ease-out; }
+    .sheet { width: 100%; max-width: 480px; background: var(--card); border-radius: 18px 18px 0 0; padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); text-align: center;
+      animation: up .28s cubic-bezier(.2, .8, .2, 1); }
+    /* The full bill sheet is the receipt itself */
+    .sheet.tall { position: relative; max-height: 90vh; overflow-y: auto; text-align: left; }
+    .sheet .receipt { background: none; box-shadow: none; padding: 6px 4px 0; margin: 0; animation: none; }
+    .sheet .receipt::after { display: none; }
+    .x.corner { position: absolute; top: 14px; right: 12px; z-index: 2; } /* above the receipt, which is positioned too */
+    .sheet-head { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 17px; margin-bottom: 12px; }
+    .x { border: none; padding: 4px; font-size: 24px; line-height: 1; color: var(--muted); }
+    .qr-amount { font-size: 32px; font-weight: 800; }
+    .qr-to { font-size: 13px; color: var(--muted); margin: 4px 0 16px; }
+    .qr svg { display: block; margin: 0 auto 4px; width: 240px; height: 240px; background: #fff; border-radius: 12px; }
+    @keyframes up { from { transform: translateY(32px); opacity: 0; } }
+    /* Wide screens: sheets become centred modals */
+    @media (min-width: 640px) {
+      .sheet-back { align-items: center; padding: 24px; }
+      .sheet { max-width: 440px; border-radius: 18px; padding: 22px 20px; box-shadow: 0 16px 48px #0004; animation: pop .2s cubic-bezier(.2, .8, .2, 1); }
+      .sheet.tall { max-height: 85vh; }
+    }
+    @keyframes pop { from { transform: scale(.96); opacity: 0; } }
     /* App header, as in SplitEasy: logo and name (opens the app), and a link to saved requests */
-    .top { width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between;
-      padding: calc(14px + env(safe-area-inset-top)) 8px 12px; }
+    .top { width: 100%; max-width: 380px; display: flex; align-items: center; justify-content: space-between;
+      padding: calc(14px + env(safe-area-inset-top)) 2px 12px; } /* same width as the card, so their edges line up */
     .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; color: var(--text); text-decoration: none; }
     .brand img { width: 28px; height: 28px; }
     .icons { display: flex; gap: 2px; }
     .top .icon { display: flex; padding: 6px; border: none; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
-    .card { margin: auto 0; }
+    .card { margin-top: 8px; } /* fixed under the header, so opening the full bill doesn't move it */
     .icon .sun { display: none; }
     :root[data-theme="dark"] .icon .sun { display: inline; }
     :root[data-theme="dark"] .icon .moon { display: none; }
@@ -78,9 +95,60 @@
     .mark { width: 100%; margin-top: 10px; font-weight: 600; font-size: 14px; }
     .paid-note { margin-top: 4px; font-size: 14px; font-weight: 600; color: #16a34a; }
     .paid-note button { border: none; padding: 0 0 0 6px; font-size: 13px; font-weight: 500; color: var(--muted); text-decoration: underline; }
-    .pick { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-    .pick-label { width: 100%; font-size: 13px; color: var(--muted); margin-bottom: 2px; }
-    .pick button { font-size: 14px; font-weight: 600; }
+    .hint { margin-top: 4px; }
+    /* The reader's own items, receipt style, between the amount and the pay button */
+    .mine { margin: -6px 0 20px; padding: 10px 0 2px; border-top: 1.5px dashed var(--line); text-align: left; }
+    .mine .pline { font-size: 13px; padding: 3px 0; }
+    .actions { display: flex; justify-content: center; margin: 20px -24px -8px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .actions:not(:has(.act:not([hidden]))) { display: none; }
+    .act { border: none; padding: 4px 14px; font-weight: 600; font-size: 14px; color: var(--accent); }
+    .act:not([hidden]) + .act:not([hidden]) { border-left: 1px solid var(--line); border-radius: 0; }
+    .viewas { margin-top: 14px; font-size: 12px; color: var(--muted); }
+    .viewas .linkish { display: inline; margin: 0; font-size: 12px; }
+    .linkish { display: block; margin: 14px auto 0; border: none; padding: 0; font-size: 13px; color: var(--muted); text-decoration: underline; }
+    /* "Which one are you?": one row per person, like the cards below */
+    .pick { text-align: left; margin-top: 4px; }
+    .pick-label { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; text-align: center; }
+    .pick-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: left; }
+    .pick-row + .pick-row { margin-top: 8px; }
+    .pick-row .avatar { width: 32px; height: 32px; font-size: 13px; }
+    .pick-row .amt { margin-left: auto; font-variant-numeric: tabular-nums; }
+    .pick-name { display: flex; align-items: center; gap: 6px; }
+    /* Full bill: one receipt, person by person */
+    .people { width: 100%; max-width: 380px; margin-top: 16px; }
+    .people-head:empty { display: none; }
+    .receipt { position: relative; background: var(--card); border-radius: 14px 14px 0 0; padding: 22px 20px 14px; margin-bottom: 12px;
+      box-shadow: 0 4px 24px #0001; animation: fade .2s ease-out; }
+    /* torn-paper edge along the bottom */
+    .receipt::after { content: ""; position: absolute; left: 0; right: 0; bottom: -10px; height: 10px;
+      background: linear-gradient(-45deg, transparent 7px, var(--card) 0) 0 0 / 14px 10px repeat-x, linear-gradient(45deg, transparent 7px, var(--card) 0) 0 0 / 14px 10px repeat-x; }
+    .r-title { font-weight: 800; font-size: 18px; text-align: center; }
+    .r-tabs { display: flex; gap: 4px; background: var(--bg); border-radius: 10px; padding: 3px; margin: 12px 0 4px; }
+    .r-tabs button { flex: 1; border: none; border-radius: 8px; padding: 6px 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+    .r-tabs button.on { background: var(--card); color: var(--accent); box-shadow: 0 1px 3px #0001; }
+    .r-body > :first-child { border-top: 1.5px dashed var(--line); margin-top: 10px; }
+    .bline { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; font-size: 14px; padding: 5px 0; }
+    .bline:first-child { padding-top: 12px; }
+    .bline.muted { color: var(--muted); font-size: 13px; padding: 4px 0; }
+    .bamt { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+    .bline.muted .bamt { font-weight: 400; }
+    .r-rule { border-top: 1.5px dashed var(--line); margin: 6px 0 4px; }
+    .r-sub { font-size: 12px; color: var(--muted); text-align: center; margin: 2px 0 6px; }
+    .r-person { padding: 12px 0 8px; border-top: 1.5px dashed var(--line); }
+    .r-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+    .r-name { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; min-width: 0; }
+    .r-name .avatar { width: 24px; height: 24px; font-size: 11px; }
+    .r-amt { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .r-person .pline { padding-left: 32px; }
+    .r-person.me .r-name { color: var(--accent); }
+    .tag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 1px 6px; }
+    .tag.ok { color: #16a34a; }
+    .tag.you { color: var(--accent); }
+    .r-total { display: flex; justify-content: space-between; font-weight: 800; font-size: 16px; padding-top: 12px; border-top: 1.5px solid var(--text); font-variant-numeric: tabular-nums; }
+    .avatar { width: 34px; height: 34px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .pline { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); padding: 3px 0; }
+    .pline span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    @keyframes fade { from { opacity: 0; } }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -104,20 +172,55 @@
   </header>
   <main class="card" id="card">
     <div class="label" id="label">Payment request</div>
+    <div class="note" id="note"></div>
+    <div class="sharehead" id="sharehead" hidden></div>
     <div class="amount" id="amount"></div>
     <div class="to" id="to"></div>
-    <div class="note" id="note"></div>
-    <ul class="items" id="items" hidden></ul>
+    <div class="mine" id="mine" hidden></div>
+    <div class="pick" id="pick" hidden></div>
     <a class="pay gpay" id="gpay" hidden>Pay with Google Pay</a>
-    <a class="pay" id="pay" hidden>Pay with UPI app</a>
-    <div class="id" id="upibox" hidden>
-      Or pay manually to this UPI ID
-      <code id="upi"></code>
-      <button id="copy" type="button">Copy UPI ID</button>
+    <div class="payrow">
+      <a class="pay" id="pay" hidden>Pay with any UPI app</a>
+      <button class="qrbtn" id="qrbtn" type="button" hidden aria-label="Show QR code to scan and pay" title="Show QR to scan and pay">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3" /></svg>
+      </button>
     </div>
-    <button class="toggle" id="toggle" type="button" hidden>View full split</button>
-    <div class="split" id="split" hidden></div>
+    <div class="id" id="upibox" hidden>
+      or pay to <code id="upi"></code>
+      <button class="copy" id="copy" type="button" aria-label="Copy UPI ID" title="Copy UPI ID">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+      </button>
+    </div>
+    <p class="hint" id="hint" hidden></p>
+    <div class="paid-note" id="paidnote" hidden></div>
+    <!-- Secondary actions as quiet links in one row -->
+    <div class="actions">
+      <button class="act" id="mark" type="button" hidden>Mark as paid</button>
+      <button class="act" id="full" type="button" hidden>View full bill</button>
+    </div>
+    <div class="viewas" id="viewas" hidden></div>
   </main>
+  <section class="people" id="people" hidden>
+    <div class="people-head" id="peoplehead"></div>
+    <div id="cards"></div>
+  </section>
+  <!-- Full bill from your share: the receipt, person by person, in a sheet so the pay card stays put -->
+  <div class="sheet-back" id="billsheet" hidden>
+    <div class="sheet tall" role="dialog" aria-modal="true" aria-label="Full bill">
+      <button class="x corner" data-close type="button" aria-label="Close">&times;</button>
+      <div id="billbody"></div>
+    </div>
+  </div>
+  <!-- Scan to pay: the same UPI payment as a QR code, for paying from another phone -->
+  <div class="sheet-back" id="qrsheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="Scan to pay">
+      <div class="sheet-head"><span>Scan to pay</span><button class="x" data-close type="button" aria-label="Close">&times;</button></div>
+      <div class="qr-amount" id="qramount"></div>
+      <div class="qr-to" id="qrto"></div>
+      <div class="qr" id="qr"></div>
+      <div class="qr-to">Works with any UPI app.</div>
+    </div>
+  </div>
   <script>
     (function () {
       var UPI = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/;
@@ -211,7 +314,7 @@
       function remember(r) {
         var list = loadReqs(), old = list.filter(function (x) { return x.id === HASH; })[0] || {};
         r.id = HASH; r.savedAt = Date.now(); r.paid = old.paid;
-        if (r.group) { r.me = old.me; r.who = old.who; r.share = old.share; }
+        if (r.group) { r.me = old.me; r.who = old.who; r.share = old.share; r.payer = old.payer; }
         saveReqs([r].concat(list.filter(function (x) { return x.id !== HASH; })));
       }
       function patchReq(patch) {
@@ -237,152 +340,263 @@
         if (/iPhone|iPad|iPod/i.test(ua)) return "gpay://upi/pay" + query;
         return "";
       }
-      function showUpiId(v) {
-        $("upibox").hidden = false;
-        $("upi").textContent = v.upi;
-        $("copy").addEventListener("click", function (e) {
-          navigator.clipboard.writeText(v.upi).then(function () { e.target.textContent = "Copied"; });
+      $("copy").addEventListener("click", function () {
+        var b = $("copy"), icon = b.innerHTML;
+        navigator.clipboard.writeText($("upi").textContent).then(function () {
+          b.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+          setTimeout(function () { b.innerHTML = icon; }, 1500);
         });
-      }
-      function settleHint(v) {
-        card.insertBefore(el("p", "hint", v.payee ? "Settle up with " + v.payee + " directly." : "Settle up with the person who paid."), $("toggle"));
-      }
+      });
 
-      function render(v) {
-        // Name whose share this is rather than assuming the reader: group links get opened by anyone
-        if (v.who) $("label").textContent = v.who + "\u2019s share";
-        $("amount").textContent = money(v.c, v.amount);
-        $("to").textContent = v.payee ? "to " + v.payee : "";
-        $("note").textContent = v.note;
+      var COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
+      var round2 = function (n) { return Math.round(n * 100) / 100; };
 
-        var list = $("items");
-        v.lines.forEach(function (l) {
-          var li = el("li");
-          li.appendChild(el("span", null, l[0]));
-          li.appendChild(el("span", null, isNaN(l[1]) ? "" : money(v.c, l[1])));
-          list.appendChild(li);
-        });
-        if (list.children.length) list.hidden = false;
-
-        if (hasUpi(v)) {
-          $("pay").href = upiHref(v, v.amount);
-          $("pay").hidden = false;
-          var gpay = gpayHref($("pay").href);
-          if (gpay) { $("gpay").href = gpay; $("gpay").hidden = false; }
-          showUpiId(v);
-        } else settleHint(v);
-
-        // Mark as paid, to keep track in the app; once paid the pay options step aside
-        var mark = el("button", "mark", "Mark as paid"), note = el("div", "paid-note");
-        mark.type = "button";
-        card.insertBefore(mark, $("toggle"));
-        card.insertBefore(note, $("toggle"));
-        function paintPaid() {
-          var byPayer = v.everyone && v.everyone[v.me] && v.everyone[v.me].paid, mine = !!myReq().paid, paid = byPayer || mine;
-          mark.hidden = paid;
-          note.hidden = !paid;
-          note.textContent = byPayer ? "\u2713 Marked paid by " + (v.payee || "the payer") : "\u2713 You marked your share paid";
-          if (mine && !byPayer) {
-            var undo = el("button", null, "Undo");
-            undo.type = "button";
-            undo.addEventListener("click", function () { patchReq({ paid: false }); paintPaid(); });
-            note.appendChild(undo);
-          }
-          ["gpay", "pay", "upibox"].forEach(function (id) { if (hasUpi(v) && (id !== "gpay" || $("gpay").href)) $(id).hidden = paid; });
-          var hint = card.querySelector(".hint");
-          if (hint) hint.hidden = paid;
-        }
-        mark.addEventListener("click", function () { patchReq({ paid: true }); paintPaid(); });
-        paintPaid();
-
-        if (v.everyone) renderSplit(v, false);
-      }
-
-      // Group link: the whole bill with everyone's share open, and a pay button per person still owing
-      function renderGroup(v) {
+      // Every link is the whole split. A personal link says whose share it is; on a group link the reader
+      // says who they are (remembered for this link). Then the page is the same either way: their share,
+      // pay and Mark as paid, and everyone's shares as cards below.
+      function show(v) {
+        var req = myReq();
+        var me = v.me >= 0 ? v.me : req.me != null ? req.me : -1;
         var billTotal = v.everyone.reduce(function (t, p) { return t + p.total; }, 0);
+        ["sharehead", "viewas", "mine", "pick", "gpay", "pay", "qrbtn", "upibox", "hint", "mark", "paidnote", "full"].forEach(function (id) { $(id).hidden = true; });
+        // Reads like a receipt: the bill's name over the amount, then what the amount is
         $("label").textContent = v.note || "Bill split";
-        $("amount").textContent = money(v.c, billTotal);
-        $("to").textContent = "paid by " + v.everyone[0].name;
-        if (hasUpi(v)) showUpiId(v); else settleHint(v);
-        renderSplit(v, true);
-        // "Or pay manually" reads right only after the per-person pay buttons
-        card.appendChild($("upibox"));
-        groupPaid(v);
-      }
+        $("note").textContent = "";
 
-      // Same Mark as paid as on a personal link; on a group link it first asks which person the reader is
-      function groupPaid(v) {
-        var people = v.everyone.map(function (p, i) { return { p: p, i: i }; }).filter(function (x) { return x.i > 0 && !x.p.paid; });
-        var mark = el("button", "mark", "Mark as paid"), pick = el("div", "pick"), note = el("div", "paid-note");
-        mark.type = "button";
-        pick.hidden = true;
-        [mark, pick, note].forEach(function (n) { card.appendChild(n); });
-        function choose(x) {
-          patchReq({ paid: true, me: x.i, who: x.p.name, share: Math.round(x.p.total * 100) / 100 });
-          refresh();
+        if (v.legacy) {
+          var only = v.everyone[0];
+          $("amount").textContent = money(v.c, only.total);
+          $("to").textContent = v.payee ? "to " + v.payee : "";
+          myLines(v, only);
+          payArea(v, only);
+          $("people").hidden = true;
+          return;
         }
-        function refresh() {
-          var req = myReq(), mine = req.paid && req.me != null;
-          $("split").textContent = "";
-          renderSplit(v, true);
-          pick.hidden = true;
-          mark.hidden = mine || !people.length;
-          note.hidden = !mine;
-          note.textContent = mine ? "\u2713 You marked your share paid (" + req.who + ")" : "";
-          if (mine) {
-            var undo = el("button", null, "Undo");
-            undo.type = "button";
-            undo.addEventListener("click", function () { patchReq({ paid: false, me: undefined, who: undefined, share: undefined }); refresh(); });
-            note.appendChild(undo);
-          }
-        }
-        mark.addEventListener("click", function () {
-          if (people.length === 1) return choose(people[0]);
+
+        if (me < 0) {
+          // Group link, reader not known yet: the split itself is the first screen. Everyone's share,
+          // and tapping your name takes you to your share and the pay options (remembered for this link)
+          $("amount").textContent = money(v.c, billTotal);
+          $("to").textContent = "Total \u00b7 paid by " + v.everyone[0].name;
+          var pick = $("pick");
           pick.textContent = "";
-          pick.appendChild(el("div", "pick-label", "Which one are you?"));
-          people.forEach(function (x) {
-            var b = el("button", null, x.p.name + " \u00b7 " + money(v.c, x.p.total));
+          pick.appendChild(el("div", "pick-label", "Tap your name to pay"));
+          v.everyone.forEach(function (p, i) {
+            var b = el("button", "pick-row");
             b.type = "button";
-            b.addEventListener("click", function () { choose(x); });
+            b.appendChild(avatar(p, i));
+            var who = el("span", "pick-name", p.name);
+            if (i === 0) who.appendChild(el("span", "tag", "payer"));
+            else if (p.paid) who.appendChild(el("span", "tag ok", "\u2713 paid"));
+            b.appendChild(who);
+            b.appendChild(el("span", "amt", money(v.c, p.total)));
+            b.addEventListener("click", function () {
+              patchReq({ me: i, who: p.name, share: round2(p.total), payer: i === 0 });
+              show(v);
+            });
             pick.appendChild(b);
           });
-          mark.hidden = true;
           pick.hidden = false;
-        });
-        refresh();
+          people(v, -1, true); // the itemized bill, behind View full bill
+          return;
+        }
+
+        if (me === 0) {
+          // The payer opened it: what's left to collect
+          var owed = v.everyone.reduce(function (t, p, i) { return i > 0 && !p.paid ? t + p.total : t; }, 0);
+          $("amount").textContent = money(v.c, billTotal);
+          $("note").textContent = "Total \u00b7 paid by you";
+          $("to").textContent = owed > 0.004 ? "(collect " + money(v.c, owed) + ")" : "(everyone has paid)";
+          if (v.me < 0) changeLink(v, v.everyone[0].name);
+        } else {
+          var mine = v.everyone[me];
+          $("amount").textContent = money(v.c, round2(mine.total));
+          // Say what the amount is: the same bill showed its total on the list, so name the share and the whole
+          // How much, and whose share it is; the bill's total and payer describe the bill above
+          $("note").textContent = money(v.c, billTotal) + " total \u00b7 paid by " + v.everyone[0].name;
+          $("sharehead").textContent = mine.name + "\u2019s share";
+          $("sharehead").hidden = false;
+          $("to").textContent = "";
+          myLines(v, mine);
+          payArea(v, mine);
+          if (v.me < 0) changeLink(v, mine.name);
+        }
+        // On your share, everyone else's shares wait behind View full bill; otherwise they're the main content
+        people(v, me, me > 0);
       }
 
-      function renderSplit(v, open) {
-        var box = $("split"), toggle = $("toggle");
+      // QR of the UPI payment (qrcode-generator, loaded on first use; dark on white so scanners read it in dark mode)
+      function showQr(v, amount, link) {
+        $("qramount").textContent = money(v.c, amount);
+        $("qrto").textContent = "to " + v.payee + " \u00b7 " + v.upi;
+        var draw = function () {
+          var qr = qrcode(0, "M");
+          qr.addData(link);
+          qr.make();
+          var n = qr.getModuleCount(), d = "";
+          for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) d += "M" + (c + 4) + " " + (r + 4) + "h1v1h-1z";
+          $("qr").innerHTML = '<svg viewBox="0 0 ' + (n + 8) + " " + (n + 8) + '" shape-rendering="crispEdges" role="img" aria-label="UPI payment QR code"><path fill="#000" d="' + d + '"/></svg>';
+          $("qrsheet").hidden = false;
+        };
+        if (window.qrcode) return draw();
+        var sc = document.createElement("script");
+        sc.src = "vendor/qrcode.js";
+        sc.onload = draw;
+        document.head.appendChild(sc);
+      }
+      // Sheets close with ×, a tap outside, or Escape
+      var closeSheets = function () { ["qrsheet", "billsheet"].forEach(function (id) { $(id).hidden = true; }); };
+      ["qrsheet", "billsheet"].forEach(function (id) {
+        $(id).addEventListener("click", function (e) { if (e.target === $(id) || e.target.hasAttribute("data-close")) closeSheets(); });
+      });
+      document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeSheets(); });
+
+      // What the reader's share is made of, always visible (everyone else's is behind View full bill)
+      function myLines(v, p) {
+        var box = $("mine");
+        box.textContent = "";
+        p.lines.forEach(function (l) {
+          var r = el("div", "pline");
+          r.appendChild(el("span", null, l[0]));
+          r.appendChild(el("span", null, money(v.c, l[1])));
+          box.appendChild(r);
+        });
+        box.hidden = !p.lines.length;
+      }
+
+      // On a group link: a quiet "Not Gopu?" at the bottom of the card, back to the list of names
+      function changeLink(v, who) {
+        var line = $("viewas");
+        line.textContent = "";
+        var b = el("button", "linkish", "Not " + who + "?");
+        b.type = "button";
+        line.appendChild(b);
+        line.hidden = false;
+        b.onclick = function () { patchReq({ me: undefined, who: undefined, share: undefined, payer: undefined, paid: false }); show(v); };
+      }
+
+      // Pay options and Mark as paid for the reader's share; once paid, the pay options step aside
+      function payArea(v, mine) {
+        var byPayer = mine.paid, marked = !!myReq().paid, paid = byPayer || marked;
+        if (hasUpi(v) && !paid) {
+          $("pay").href = upiHref(v, round2(mine.total));
+          $("pay").hidden = false;
+          $("qrbtn").hidden = false;
+          $("qrbtn").onclick = function () { showQr(v, round2(mine.total), $("pay").href); };
+          var gpay = gpayHref($("pay").href);
+          if (gpay) { $("gpay").href = gpay; $("gpay").hidden = false; }
+          $("upi").textContent = v.upi;
+          $("upibox").hidden = false;
+        } else if (!paid) {
+          $("hint").textContent = v.payee ? "Settle up with " + v.payee + " directly." : "Settle up with the person who paid.";
+          $("hint").hidden = false;
+        }
+        $("mark").hidden = paid;
+        $("mark").onclick = function () { patchReq({ paid: true }); show(v); };
+        var note = $("paidnote");
+        note.hidden = !paid;
+        note.textContent = byPayer ? "\u2713 Marked paid by " + (v.payee || "the payer") : paid ? "\u2713 You marked your share paid" : "";
+        if (marked && !byPayer) {
+          var undo = el("button", null, "Undo");
+          undo.type = "button";
+          undo.addEventListener("click", function () { patchReq({ paid: false }); show(v); });
+          note.appendChild(undo);
+        }
+      }
+
+      function avatar(p, i) {
+        var a = el("span", "avatar", (p.name.trim()[0] || "?").toUpperCase());
+        a.style.background = COLORS[i % COLORS.length];
+        return a;
+      }
+
+      // Everyone's shares as cards; the reader's own card first and outlined. Tap a card for its items.
+      // The full bill as one receipt, person by person: name and total, then what their share is made of
+      function people(v, me, collapsed) {
         var billTotal = v.everyone.reduce(function (t, p) { return t + p.total; }, 0);
-        if (!open) box.appendChild(el("div", "sum", "Bill " + money(v.c, billTotal) + " · " + v.everyone.length + " people"));
+        $("peoplehead").textContent = "";
+        var box = collapsed ? $("billbody") : $("cards");
+        box.textContent = "";
+        $("cards").textContent = "";
+        var receipt = el("div", "receipt");
+        // A printed bill: name, who paid, each person's part, the total
+        receipt.appendChild(el("div", "r-title", v.note || "Bill split"));
+        receipt.appendChild(el("div", "r-sub", v.everyone.length + " people \u00b7 paid by " + v.everyone[0].name));
+        // Two views of the same receipt: the bill as printed, and who pays what
+        var tabs = el("div", "r-tabs"), bill = el("div", "r-body"), split = el("div", "r-body");
+        [["Bill", bill], ["Split", split]].forEach(function (t, k) {
+          var b = el("button", k === 0 ? "on" : null, t[0]);
+          b.type = "button";
+          b.addEventListener("click", function () {
+            [].forEach.call(tabs.children, function (x) { x.className = x === b ? "on" : ""; });
+            bill.hidden = t[1] !== bill;
+            split.hidden = t[1] !== split;
+          });
+          tabs.appendChild(b);
+        });
+        split.hidden = true;
+        receipt.appendChild(tabs);
+
+        // Bill: as printed. Items at full price, subtotal, charges
+        var line = function (label, amount, cls) {
+          var r = el("div", "bline" + (cls ? " " + cls : ""));
+          r.appendChild(el("span", null, label));
+          r.appendChild(el("span", "bamt", money(v.c, amount)));
+          return r;
+        };
+        var itemsSum = 0;
+        (v.items || []).forEach(function (it) {
+          itemsSum += Number(it[1]) || 0;
+          bill.appendChild(line(String(it[0]), Number(it[1]) || 0));
+        });
+        var taxes = v.taxes || [];
+        if (taxes.length || v.roundOff) {
+          bill.appendChild(el("div", "r-rule"));
+          bill.appendChild(line("Subtotal", itemsSum, "muted"));
+        }
+        taxes.forEach(function (t) { bill.appendChild(line(String(t[0]), Number(t[1]) || 0, "muted")); });
+        if (v.roundOff) {
+          var raw = (v.items || []).reduce(function (t, it) { return t + (Number(it[1]) || 0); }, 0) + taxes.reduce(function (t, x) { return t + (Number(x[1]) || 0); }, 0);
+          var adj = Math.round((Math.round(raw) - raw) * 100) / 100;
+          if (adj) bill.appendChild(line("Round off", adj, "muted"));
+        }
+
+        // Split: each person's total and what it's made of
+        var req = myReq();
         v.everyone.forEach(function (p, i) {
-          var row = el("div", "person");
-          var top = el("div", "row");
-          var who = el("span", null, p.name);
-          if (i === 0) who.appendChild(el("span", "tag", "payer"));
-          else if (p.paid) who.appendChild(el("span", "tag ok", "✓ paid"));
-          top.appendChild(who);
-          top.appendChild(el("span", null, money(v.c, p.total)));
-          row.appendChild(top);
-          if (p.lines.length) row.appendChild(el("div", "lines", p.lines.map(function (l) { return l[0] + " " + money(v.c, l[1]); }).join(" · ")));
-          // The reader's own row once they marked themselves paid (see groupPaid)
-          var req = open ? myReq() : {}, isMe = req.paid && req.me === i;
-          if (isMe) who.appendChild(el("span", "tag ok", "\u2713 you paid"));
-          if (open && i > 0 && !p.paid && !isMe && hasUpi(v)) {
-            var btn = el("a", "pay small", "Pay " + money(v.c, p.total) + " with UPI");
-            btn.href = upiHref(v, Math.round(p.total * 100) / 100);
-            row.appendChild(btn);
-          }
-          box.appendChild(row);
+          var sec = el("div", "r-person" + (i === me ? " me" : ""));
+          var head = el("div", "r-head");
+          var name = el("span", "r-name");
+          name.appendChild(avatar(p, i));
+          name.appendChild(document.createTextNode(p.name));
+          var tags = [];
+          if (i === me) tags.push(["you", "you"]);
+          if (i === 0) tags.push(["payer", ""]);
+          else if (p.paid || (i === me && req.paid)) tags.push(["\u2713 paid", "ok"]);
+          tags.forEach(function (t) { name.appendChild(el("span", "tag " + t[1], t[0])); });
+          head.appendChild(name);
+          head.appendChild(el("span", "r-amt", money(v.c, p.total)));
+          sec.appendChild(head);
+          p.lines.forEach(function (l) {
+            var r = el("div", "pline");
+            r.appendChild(el("span", null, l[0]));
+            r.appendChild(el("span", null, money(v.c, l[1])));
+            sec.appendChild(r);
+          });
+          split.appendChild(sec);
         });
-        if (open) { box.hidden = false; return; }
-        toggle.hidden = false;
-        toggle.addEventListener("click", function () {
-          box.hidden = !box.hidden;
-          toggle.textContent = box.hidden ? "View full split" : "Hide full split";
-        });
+        receipt.appendChild(bill);
+        receipt.appendChild(split);
+        var tot = el("div", "r-total");
+        tot.appendChild(el("span", null, "Total"));
+        tot.appendChild(el("span", null, money(v.c, billTotal)));
+        receipt.appendChild(tot);
+        box.appendChild(receipt);
+        var full = $("full");
+        full.hidden = !collapsed;
+        $("people").hidden = !!collapsed;
+        full.textContent = "View full bill";
+        full.onclick = function () { $("billsheet").hidden = false; $("billsheet").querySelector(".sheet").scrollTop = 0; };
       }
 
       // Changing only the hash keeps the same document, so re-run from scratch for the new link
@@ -402,25 +616,18 @@
       });
 
       // Every opened request is kept on this device, so it can be found again in the app (History > Requests)
-
       var hash = HASH;
       if (hash) {
         try {
           var s = unpack(hash);
           var everyone = shares(s);
+          if (s.me !== -1 && !everyone[s.me]) throw new Error("bad");
           var billTotal = everyone.reduce(function (t, p) { return t + p.total; }, 0);
-          if (s.me === -1) {
-            remember({ title: s.note || "Bill split", c: s.c, amount: Math.round(billTotal * 100) / 100, group: true, payee: everyone[0].name });
-            renderGroup({ c: s.c, payee: s.payee, note: s.note, upi: s.upi, everyone: everyone });
-            return;
-          }
-          var mine = everyone[s.me];
-          if (!mine) throw new Error("bad");
-          remember({ title: s.note || "Bill split", c: s.c, amount: Math.round(mine.total * 100) / 100, who: mine.name, payee: s.payee, paidByPayer: mine.paid });
-          render({
-            c: s.c, payee: s.payee, note: s.note, upi: s.upi, me: s.me, who: mine.name,
-            amount: Math.round(mine.total * 100) / 100, lines: mine.lines, everyone: everyone
-          });
+          var personal = s.me !== -1 ? everyone[s.me] : null;
+          remember(personal
+            ? { title: s.note || "Bill split", c: s.c, amount: round2(billTotal), payee: s.payee, me: s.me, who: personal.name, share: round2(personal.total), payer: s.me === 0, paidByPayer: personal.paid }
+            : { title: s.note || "Bill split", c: s.c, amount: round2(billTotal), payee: everyone[0].name, group: true });
+          show({ c: s.c, payee: s.payee, note: s.note, upi: s.upi, me: s.me, everyone: everyone, items: s.items, taxes: s.taxes, roundOff: s.roundOff });
         } catch (e) { console.error(e); fail(); }
         return;
       }
@@ -429,14 +636,11 @@
       var q = new URLSearchParams(location.search);
       var am = q.get("am") || "";
       if (!/^\d+(\.\d{1,2})?$/.test(am)) return fail();
-      render({
-        c: (q.get("c") || "₹").slice(0, 4), payee: q.get("pn") || "", note: q.get("tn") || "", upi: q.get("pa") || "",
-        amount: Number(am),
-        lines: q.getAll("i").map(function (raw) {
-          var cut = raw.lastIndexOf("|");
-          return cut > 0 ? [raw.slice(0, cut), Number(raw.slice(cut + 1))] : [raw, NaN];
-        })
-      });
+      var legacy = { name: "Your share", total: Number(am), paid: false, lines: q.getAll("i").map(function (raw) {
+        var cut = raw.lastIndexOf("|");
+        return cut > 0 ? [raw.slice(0, cut), Number(raw.slice(cut + 1))] : [raw, 0];
+      }) };
+      show({ c: (q.get("c") || "₹").slice(0, 4), payee: q.get("pn") || "", note: q.get("tn") || "", upi: q.get("pa") || "", me: 0, legacy: true, everyone: [legacy] });
     })();
   </script>
 </body>

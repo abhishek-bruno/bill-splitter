@@ -111,6 +111,7 @@ html { scroll-padding-top: 150px; scroll-padding-bottom: 96px; }
 .hero-title { animation-delay: .1s; }
 .hero-chips { animation-delay: .2s; }
 @media (max-height: 700px) { .hero-art { transform: scale(.8); margin: -12px 0 10px; } }
+@media (max-width: 374px) { .hero-chips { gap: 4px; } .hero-chip { padding: 6px 8px; gap: 4px; font-size: 11.5px; } }
 @media (max-height: 600px) { .hero-art { transform: scale(.6); margin: -30px 0 -8px; } }
 
 /* Motion: short enter animations only. Screens fade (opacity only, so sticky footers aren't affected),
@@ -119,13 +120,23 @@ html { scroll-padding-top: 150px; scroll-padding-bottom: 96px; }
 .screen-in { animation: fade-in .2s ease-out both; }
 .fade-in { animation: fade-in .18s ease-out both; }
 .sheet-in { animation: sheet-in .28s var(--ease-out) both; }
+/* Sheets: slide up from the bottom on phones; a centred modal on wide screens */
+.sheet-backdrop { position: fixed; inset: 0; z-index: 50; background: #0008; display: flex; align-items: flex-end; justify-content: center; }
+.sheet-panel { width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; box-sizing: border-box;
+  background: var(--surface); color: var(--text); border-radius: 18px 18px 0 0; padding: 20px 16px 24px;
+  animation: sheet-in .28s var(--ease-out) both; }
+@media (min-width: 640px) {
+  .sheet-backdrop { align-items: center; padding: 24px; }
+  .sheet-panel { max-width: 440px; max-height: 85vh; border-radius: 18px; padding: 22px 20px; box-shadow: 0 16px 48px #0004;
+    animation: dialog-in .2s var(--ease-out) both; }
+}
 .dialog-in { animation: dialog-in .2s var(--ease-out) both; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes rise-in { from { opacity: 0; transform: translateY(6px); } }
 @keyframes sheet-in { from { transform: translateY(32px); opacity: 0; } }
 @keyframes dialog-in { from { transform: scale(.96); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .screen-in, .fade-in, .sheet-in, .dialog-in, .install-toast,
+  .screen-in, .fade-in, .sheet-in, .dialog-in, .sheet-panel, .install-toast,
   .hero-bill, .hero-people span, .hero-title, .hero-chips { animation: none; }
 }
 

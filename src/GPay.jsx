@@ -13,14 +13,9 @@ export function Sheet({ title, onClose, children }) {
 
   // On <body> so the backdrop also covers the sticky header
   return createPortal(
-    <div onClick={onClose} className="fade-in" style={{
-      position: "fixed", inset: 0, zIndex: 50, background: "#0008",
-      display: "flex", alignItems: "flex-end", justifyContent: "center"
-    }}>
-      <div role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()} className="sheet-in" style={{
-        width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto", boxSizing: "border-box",
-        background: "var(--surface)", color: "var(--text)", borderRadius: "18px 18px 0 0", padding: "20px 16px 24px"
-      }}>
+    // Bottom sheet on phones, centred modal on wide screens (styles in index.css: .sheet-backdrop, .sheet-panel)
+    <div onClick={onClose} className="sheet-backdrop fade-in">
+      <div role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()} className="sheet-panel">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div style={{ fontWeight: 800, fontSize: 17 }}>{title}</div>
           <button onClick={onClose} aria-label="Close" style={{
