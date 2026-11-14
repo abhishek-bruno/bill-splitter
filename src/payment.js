@@ -7,95 +7,114 @@ const money = (currency, n) => `${currency}${n.toFixed(2)}`;
 // UPI only settles in INR, so links are offered only for rupee bills
 export const supportsUpi = (bill) => bill.currency === "₹";
 
-function upiParams({ upiId, payeeName, amount, note }) {
-  const params = new URLSearchParams({ pa: upiId, pn: payeeName, am: amount.toFixed(2), cu: "INR" });
-  if (note) params.set("tn", note.slice(0, 50));
-  return params.toString();
-}
-
-export const upiLink = (opts) => `upi://pay?${upiParams(opts)}`;
-
-// Messaging apps only linkify http(s) links, so point to a small page that opens the UPI app.
-// Only usable once the app is served over https (a localhost link means nothing to the recipient).
-export function payPageLink(opts) {
-  if (location.protocol !== "https:") return null;
-  return `${new URL("pay.html", document.baseURI).href}?${upiParams(opts)}`;
-}
-
-// One "• item: share" line per item the person had, plus their part of shared charges
-function itemLines({ bill, person, assignments }) {
-  const c = bill.currency;
+// What one person owes, line by line: their share of each item plus their part of shared charges
+function shareLines({ bill, person, assignments }) {
   const lines = [];
   bill.items.forEach(item => {
     const assigned = assignments[item.id] || [];
     if (!assigned.includes(person.id)) return;
-    const share = item.amount / assigned.length;
-    const split = assigned.length > 1 ? ` (${money(c, item.amount)} split ${assigned.length} ways)` : "";
-    lines.push(`• ${item.name}: ${money(c, share)}${split}`);
+    lines.push({ label: item.name, amount: item.amount / assigned.length, total: item.amount, ways: assigned.length });
   });
   if (person.shared > 0) {
-    const names = bill.taxes.map(t => t.name).join(", ");
-    lines.push(`• Shared charges (${names}): ${money(c, person.shared)}`);
+    lines.push({ label: `Shared charges (${bill.taxes.map(t => t.name).join(", ")})`, amount: person.shared, ways: 1 });
   }
   return lines;
 }
 
-// UPI links for one person's amount, or [] when UPI isn't set up or the bill isn't in rupees
-function payLinks({ bill, person, people, payment }) {
-  if (!payment?.upiId || !supportsUpi(bill)) return [];
-  const opts = {
-    upiId: payment.upiId,
-    payeeName: payment.name || people[0]?.name || "Payee",
-    amount: Math.round(person.total * 100) / 100,
-    note: `${bill.restaurant} bill`
-  };
-  const page = payPageLink(opts);
-  // In a group message one tappable link per person is enough; fall back to upi:// before deploying
-  return page ? [page] : [upiLink(opts)];
+// One "• item: share" line per item the person had, plus their part of shared charges
+function itemLines(args) {
+  const c = args.bill.currency;
+  return shareLines(args).map(l => {
+    const split = l.ways > 1 ? ` (${money(c, l.total)} split ${l.ways} ways)` : "";
+    return `• ${l.label}: ${money(c, l.amount)}${split}`;
+  });
 }
 
-export function buildShareText({ bill, person, assignments, people, payment }) {
+const payeeOf = (payment, people) => payment?.name || people[0]?.name || "Payee";
+const hasUpi = (bill, payment) => Boolean(payment?.upiId) && supportsUpi(bill);
+
+// Where pay.html lives for recipients: VITE_PUBLIC_URL (see .env), else this page when served over https.
+// A localhost link means nothing to the recipient, so without either there is no link.
+const publicBase = () => import.meta.env.VITE_PUBLIC_URL || (location.protocol === "https:" ? document.baseURI : null);
+
+// The whole split packed as small as possible for the URL hash (never sent to the server).
+// Plain text with control-character separators (no JSON quotes or brackets), then base64url:
+//   fields  (RS \x1e): version, place, currency ("" = ₹), payee ("" = first person), upiId, recipientIdx ("-" = group),
+//                      names, items, charges, paidMask
+//   lists   (GS \x1d): one entry per name / item / charge
+//   parts   (US \x1f): item = name, amount, peopleMask ("" = everyone); charge = name, amount
+// Masks are base36 bitmasks over the names list. Trailing empty fields are dropped.
+// pay.html decodes this and recomputes every share the same way computeTotals does.
+const RS = "\x1e", GS = "\x1d", US = "\x1f";
+const clean = (v) => String(v ?? "").replace(/[\x1d-\x1f]/g, " ");
+
+function packSplit({ bill, person, assignments, people, payment, paid = {} }) {
+  // person omitted = group link: the page shows the whole split instead of one person's share
+  const idx = new Map(people.map((p, i) => [p.id, i]));
+  const everyone = 2 ** people.length - 1;
+  const mask = (ids) => ids.reduce((m, id) => (idx.has(id) ? m | (1 << idx.get(id)) : m), 0);
+  const maskField = (m) => (m === everyone ? "" : m.toString(36));
+  const payee = payeeOf(payment, people);
+  const fields = [
+    "2",
+    clean(bill.restaurant),
+    bill.currency === "₹" ? "" : clean(bill.currency),
+    payee === people[0]?.name ? "" : clean(payee),
+    hasUpi(bill, payment) ? payment.upiId : "",
+    person ? String(idx.get(person.id) ?? 0) : "-",
+    people.map(p => clean(p.name)).join(GS),
+    bill.items.map(i => [clean(i.name), i.amount, maskField(mask(assignments[i.id] || []))].join(US)).join(GS),
+    (bill.taxes || []).map(t => [clean(t.name), t.amount].join(US)).join(GS),
+    (mask(Object.keys(paid).filter(id => paid[id])) || "").toString(36)
+  ];
+  while (fields.length && fields[fields.length - 1] === "") fields.pop();
+  const bytes = new TextEncoder().encode(fields.join(RS));
+  let bin = "";
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// Messaging apps only linkify http(s) links, so point to a small page that shows the person's share,
+// the full split on request, and a UPI button when a UPI ID is set.
+export function payPageLink(args) {
+  const base = publicBase();
+  if (!base) return null;
+  return `${new URL("pay.html", base).href}#${packSplit(args)}`;
+}
+
+// The pay page has a UPI button when a UPI ID is set, so say so instead of printing the ID
+const linkLabel = (bill, payment) => (hasUpi(bill, payment) ? "Pay by UPI or see the full bill" : "See the full bill");
+
+// One person's share: a greeting with their amount and a link to pay or see the full bill.
+// Without a link (no public URL) the items and UPI ID go in the text instead.
+export function buildShareText({ bill, person, assignments, people, payment, paid }) {
   const c = bill.currency;
-  const lines = [`Hi ${person.name}, here's your share of the bill at ${bill.restaurant}:`, ""];
-  lines.push(...itemLines({ bill, person, assignments }));
-  lines.push("", `*Total: ${money(c, person.total)}*`);
-
-  if (payment?.upiId && supportsUpi(bill)) {
-    const opts = {
-      upiId: payment.upiId,
-      payeeName: payment.name || people[0]?.name || "Payee",
-      amount: Math.round(person.total * 100) / 100,
-      note: `${bill.restaurant} bill`
-    };
-    const page = payPageLink(opts);
-    lines.push("", `Pay by UPI to ${payment.upiId}:`);
-    if (page) lines.push(page);
-    lines.push(upiLink(opts));
-  }
-  return lines.join("\n");
+  const page = payPageLink({ bill, person, assignments, people, payment, paid });
+  const lines = [`Hi ${person.name}, your share of the ${bill.restaurant} bill is *${money(c, person.total)}*.`];
+  if (!page) lines.push("", ...itemLines({ bill, person, assignments }), "");
+  // Link last: pasting the whole message into an address bar glues later lines onto the hash
+  if (page) lines.push(`${linkLabel(bill, payment)}: ${page}`);
+  else if (hasUpi(bill, payment)) lines.push(`UPI: ${payment.upiId}`);
+  return lines.join("\n").trim();
 }
 
-// Whole split in one message for a group chat; totals are people with .total/.shared computed
+// Whole split in one message for a group chat; totals are people with .total/.shared computed.
+// Same voice as the personal message: greeting, each person's share, then one link to the full split.
 export function buildGroupShareText({ bill, totals, assignments, payment, paid = {} }) {
   const c = bill.currency;
   const [payer, ...debtors] = totals;
-  const lines = [
-    `*${bill.restaurant}* bill split`,
-    `Total ${money(c, bill.total)}, paid by ${payer.name}`,
-  ];
+  const page = payPageLink({ bill, assignments, people: totals, payment, paid });
+  const lines = [`Hi all, here are the shares of the ${bill.restaurant} bill (${money(c, bill.total)}, paid by ${payer.name}):`, ""];
 
-  debtors.forEach(person => {
-    lines.push("", `*${person.name}: ${money(c, person.total)}*${paid[person.id] ? " ✓ paid" : ""}`);
-    lines.push(...itemLines({ bill, person, assignments }));
-    if (!paid[person.id]) {
-      const links = payLinks({ bill, person, people: totals, payment });
-      if (links.length) lines.push(`Pay: ${links[0]}`);
-    }
+  debtors.forEach(p => {
+    lines.push(paid[p.id] ? `${p.name}: ${money(c, p.total)} ✓ paid` : `${p.name}: *${money(c, p.total)}*`);
+    if (!page) lines.push(...itemLines({ bill, person: p, assignments }));
   });
 
-  lines.push("", `${payer.name}'s own share: ${money(c, payer.total)}`);
-  if (payment?.upiId && supportsUpi(bill)) lines.push(`UPI: ${payment.upiId}`);
-  return lines.join("\n");
+  lines.push("");
+  if (page) lines.push(`${linkLabel(bill, payment)}: ${page}`);
+  else if (hasUpi(bill, payment)) lines.push(`UPI: ${payment.upiId}`);
+  return lines.join("\n").trim();
 }
 
 function isMobile() {
