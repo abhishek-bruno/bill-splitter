@@ -32,6 +32,7 @@
     .footer { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; }
     .footer a { color: var(--accent); font-weight: 600; text-decoration: none; }
     .footer img { width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; }
+    .gpay { background: #1a73e8; margin-bottom: 10px; }
     .pay.small { display: inline-block; font-size: 13px; padding: 6px 12px; border-radius: 8px; margin-top: 8px; }
     .toggle { width: 100%; margin-top: 16px; font-weight: 600; font-size: 14px; color: var(--accent); }
     .split { margin-top: 16px; text-align: left; }
@@ -53,6 +54,7 @@
     <div class="to" id="to"></div>
     <div class="note" id="note"></div>
     <ul class="items" id="items" hidden></ul>
+    <a class="pay gpay" id="gpay" hidden>Pay with Google Pay</a>
     <a class="pay" id="pay" hidden>Pay with UPI app</a>
     <div class="id" id="upibox" hidden>
       Or pay manually to this UPI ID
@@ -133,6 +135,14 @@
         if (v.note) params.set("tn", v.note.slice(0, 50));
         return "upi://pay?" + params.toString();
       }
+      // Same payment, opened straight in Google Pay instead of the UPI app picker.
+      // Android: intent pinned to GPay's package. iOS: GPay's own scheme. Elsewhere: none.
+      function gpayHref(upi) {
+        var ua = navigator.userAgent, query = upi.slice(upi.indexOf("?"));
+        if (/Android/i.test(ua)) return "intent://pay" + query + "#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end";
+        if (/iPhone|iPad|iPod/i.test(ua)) return "gpay://upi/pay" + query;
+        return "";
+      }
       function showUpiId(v) {
         $("upibox").hidden = false;
         $("upi").textContent = v.upi;
@@ -163,6 +173,8 @@
         if (hasUpi(v)) {
           $("pay").href = upiHref(v, v.amount);
           $("pay").hidden = false;
+          var gpay = gpayHref($("pay").href);
+          if (gpay) { $("gpay").href = gpay; $("gpay").hidden = false; }
           showUpiId(v);
         } else settleHint(v);
 

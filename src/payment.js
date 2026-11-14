@@ -33,6 +33,24 @@ function itemLines(args) {
 const payeeOf = (payment, people) => payment?.name || people[0]?.name || "Payee";
 const hasUpi = (bill, payment) => Boolean(payment?.upiId) && supportsUpi(bill);
 
+// Payment request for one person's share (for a scan-to-pay QR), or null when UPI isn't set up or the bill isn't in rupees
+export function upiRequest({ bill, person, people, payment }) {
+  if (!hasUpi(bill, payment)) return null;
+  return {
+    upiId: payment.upiId,
+    payeeName: payeeOf(payment, people),
+    amount: Math.round(person.total * 100) / 100,
+    note: `${bill.restaurant} bill`
+  };
+}
+
+// Standard UPI payment URI; any UPI app (Google Pay, PhonePe, Paytm…) reads it from a QR code
+export function upiLink({ upiId, payeeName, amount, note }) {
+  const params = new URLSearchParams({ pa: upiId, pn: payeeName, am: amount.toFixed(2), cu: "INR" });
+  if (note) params.set("tn", note.slice(0, 50));
+  return `upi://pay?${params}`;
+}
+
 // Where pay.html lives for recipients: VITE_PUBLIC_URL (see .env), else this page when served over https.
 // A localhost link means nothing to the recipient, so without either there is no link.
 const publicBase = () => import.meta.env.VITE_PUBLIC_URL || (location.protocol === "https:" ? document.baseURI : null);
@@ -123,7 +141,7 @@ function isMobile() {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 }
 
-async function copyText(text) {
+export async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
   } catch {

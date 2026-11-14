@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey } from "./vision.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
 import InstallBanner from "./InstallPrompt.jsx";
-import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy } from "./payment.js";
+import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy, upiRequest, copyText } from "./payment.js";
+import { PayQrSheet } from "./GPay.jsx";
 
 const COLORS = [
   "#6366f1","#f59e0b","#10b981","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f97316"
@@ -827,6 +828,28 @@ const paidStatus = (entry) => {
   return { paidCount, total: debtors.length, settled: debtors.length > 0 && paidCount === debtors.length };
 };
 
+// Tiny icon button that copies an amount (just the number), shown right under it
+function MiniCopy({ value, color = "var(--subtle)", label }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await copyText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
+  return (
+    <button onClick={copy} aria-label={copied ? "Copied" : `Copy ${label || value}`} title={copied ? "Copied" : "Copy amount"} style={{
+      display: "inline-flex", alignItems: "center", background: "none", border: "none", padding: 2,
+      color, opacity: copied ? 1 : 0.75, fontSize: 10, fontWeight: 600, cursor: "pointer", lineHeight: 1
+    }}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {copied
+          ? <path d="M5 12l5 5L20 7" />
+          : <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></>}
+      </svg>
+    </button>
+  );
+}
+
 // ── Step 4: Summary ───────────────────────────────────────────────────────────
 function SummaryStep({ bill, people, assignments, payment, onOpenSettings, savedAt, paid = {}, onTogglePaid }) {
   const totals = computeTotals(bill, people, assignments);
@@ -849,11 +872,18 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
     setTimeout(() => setGroupStatus(null), 2000);
   };
 
+  const [qrPerson, setQrPerson] = useState(null);
+  const qrRequest = qrPerson && upiRequest({ bill, person: qrPerson, people, payment });
+
   return (
     <div>
+      {qrRequest && <PayQrSheet person={qrPerson} request={qrRequest} onClose={() => setQrPerson(null)} />}
       <div style={{ background: "linear-gradient(135deg, var(--accent), #8b5cf6)", borderRadius: 14, padding: "18px 20px", marginBottom: 20, color: "#fff" }}>
         <div style={{ fontSize: 13, opacity: 0.8 }}>{bill.restaurant}</div>
-        <div style={{ fontSize: 28, fontWeight: 800, marginTop: 2 }}>{bill.currency}{bill.total?.toFixed(2)}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{bill.currency}{bill.total?.toFixed(2)}</div>
+          <MiniCopy value={bill.total?.toFixed(2)} color="#fff" label="bill total" />
+        </div>
         <div style={{ fontSize: 13, opacity: 0.75, marginTop: 4 }}>{people.length} people · {bill.items?.length} items</div>
         {savedAt && <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>✓ Saved to history · {formatDateTime(savedAt)}</div>}
       </div>
@@ -883,7 +913,10 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
                 {i === 0 && <div style={{ fontSize: 11, color: "var(--muted)" }}>Paid the bill</div>}
                 {i > 0 && paid[p.id] && <div style={{ fontSize: 11, color: "var(--success-text)", fontWeight: 600 }}>Paid · {formatDateTime(paid[p.id])}</div>}
               </div>
-              <div style={{ fontWeight: 800, fontSize: 20, color: p.color }}>{bill.currency}{p.total.toFixed(2)}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <div style={{ fontWeight: 800, fontSize: 20, color: p.color }}>{bill.currency}{p.total.toFixed(2)}</div>
+                <MiniCopy value={p.total.toFixed(2)} label={`${p.name}'s amount`} />
+              </div>
             </div>
             <div style={{ fontSize: 12, color: "var(--subtle)", display: "flex", gap: 16 }}>
               <span>Items: {bill.currency}{p.itemTotal.toFixed(2)}</span>
@@ -899,6 +932,12 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
               }}>
                 {status[p.id] === "copied" ? "✓ Copied to clipboard" : status[p.id] === "shared" ? "✓ Shared" : "Share payment details"}
               </button>
+              {!paid[p.id] && upiRequest({ bill, person: p, people, payment }) && (
+                <button onClick={() => setQrPerson(p)} aria-label={`Show UPI QR for ${p.name}`} title="Show QR to scan and pay" style={{
+                  borderRadius: 8, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: "pointer",
+                  border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)"
+                }}>QR</button>
+              )}
               {onTogglePaid && (
                 <button onClick={() => onTogglePaid(p.id)} style={{
                   flex: 1, borderRadius: 8, padding: 8, fontWeight: 600, fontSize: 13, cursor: "pointer",
