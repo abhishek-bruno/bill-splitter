@@ -637,18 +637,28 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
   // Reads only the contacts the user ticks (name and first number); nothing leaves the device.
   const canPickContacts = typeof navigator !== "undefined" && "contacts" in navigator && "select" in (navigator.contacts || {});
   const [pickError, setPickError] = useState("");
+  const [pickInfo, setPickInfo] = useState("");
   const pickContacts = async () => {
     setPickError("");
+    setPickInfo("");
     try {
       // Asking for a property the browser doesn't offer rejects the whole call, so only ask for supported ones
       const supported = await navigator.contacts.getProperties?.().catch(() => null);
       const props = ["name", "tel"].filter(p => !supported || supported.includes(p));
       const picked = await navigator.contacts.select(props, { multiple: true });
       // Closing the picker resolves with []; contacts saved without a name fall back to their number
-      addPeople(picked.map(c => {
+      const contacts = (picked || []).map(c => {
         const phone = cleanPhone(c.tel?.[0]) || undefined;
         return { name: c.name?.find(n => n?.trim()) || phone || "", phone };
-      }));
+      }).filter(c => c.name.trim());
+      const fresh = contacts.filter(c => !people.some(p => sameName(p.name, c.name)));
+      addPeople(contacts);
+      setPickInfo(
+        !picked?.length ? "No contacts were returned by the picker."
+        : !contacts.length ? `Picked ${picked.length}, but they had no name or number.`
+        : !fresh.length ? "Already in the split."
+        : `Added ${fresh.length} ${fresh.length === 1 ? "person" : "people"}.`
+      );
     } catch (e) {
       setPickError(`Couldn't read contacts (${e?.name || "error"}${e?.message ? `: ${e.message}` : ""}). Add names by typing instead.`);
     }
@@ -694,6 +704,7 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
         }}>👥 Add from contacts</button>
       )}
       {pickError && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: -8, marginBottom: 12 }}>{pickError}</div>}
+      {pickInfo && !pickError && <div style={{ color: "var(--muted)", fontSize: 12, marginTop: -8, marginBottom: 12 }}>{pickInfo}</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {people.map(p => (
           <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--surface)", border: "1px solid var(--divider)", borderRadius: 10, padding: "10px 14px" }}>
@@ -1229,6 +1240,8 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
           <button onClick={eraseAll} style={{ ...outlineBtn("#fff", "var(--danger)"), background: "var(--danger)" }}>Erase all app data</button>
         </div>
       </div>
+      {/* Which build this device is running; handy when an installed app hasn't picked up an update yet */}
+      <div style={{ textAlign: "center", fontSize: 11, color: "var(--subtle)", marginTop: 16 }}>Build {__APP_BUILD__}</div>
     </div>
   );
 }
