@@ -250,7 +250,30 @@ function normalize(raw) {
   };
 }
 
+// On-device engines are "local-<engine id>" providers (see src/local/models.js); they need no key or network
+export const isLocalProvider = (provider) => typeof provider === "string" && provider.startsWith("local-");
+
+async function scanOnDevice(file, provider) {
+  const id = provider.slice("local-".length);
+  const { isEngineReady } = await import("./local/models.js");
+  if (!(await isEngineReady(id))) throw new Error("The on-device reader isn't downloaded on this device. Download it again in settings.");
+  const { scanBasic } = await import("./local/basicScan.js");
+  const r = await scanBasic(file);
+  // The app has no negative charges, so a discount is spread over the items in proportion
+  const itemsSum = r.items.reduce((s, x) => s + x.amount, 0);
+  const factor = r.discount > 0 && itemsSum > 0 ? (itemsSum - r.discount) / itemsSum : 1;
+  const bill = normalize({
+    restaurant: r.restaurant, currency: r.currency,
+    items: r.items.map(x => ({ name: x.name, amount: x.amount * factor })),
+    taxes: r.taxes
+  });
+  if (bill.items.length === 0) throw new Error("Couldn't find items on this bill. Try a clearer, straight photo or enter manually.");
+  bill.scanCheck = r.check; // printed vs computed total, shown on the review screen
+  return bill;
+}
+
 export async function parseBillImage(file, config) {
+  if (isLocalProvider(config.provider)) return scanOnDevice(file, config.provider);
   if (!navigator.onLine) throw new Error("You're offline. Scanning needs internet; enter the bill manually instead.");
   const img = await prepareImage(file);
   const apiKey = cleanApiKey(config.apiKey);

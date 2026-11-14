@@ -15,6 +15,7 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
+    "@paddleocr/paddleocr-js": "0.4.2",
     "qrcode-generator": "^1.4.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

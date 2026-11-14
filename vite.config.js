@@ -12,6 +12,14 @@ export default defineConfig(({ mode }) => {
   return {
     base: "./",
     define: { __APP_BUILD__: JSON.stringify(APP_BUILD) },
+    build: {
+      rollupOptions: {
+        output: {
+          // Keep the on-device reader's libraries in their own chunk, loaded only when it's used
+          manualChunks: (id) => (/node_modules\/(@paddleocr|@techstark|onnxruntime-web|clipper-lib)/.test(id) ? "ondevice" : undefined)
+        }
+      }
+    },
     plugins: [
       react(),
       VitePWA({
@@ -38,6 +46,24 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
+          // The on-device reader's code (OCR + OpenCV, >10 MB) isn't installed for everyone; it's cached
+          // at runtime once someone downloads a reader (see runtimeCaching below)
+          globIgnores: ["**/ondevice-*.js", "**/worker-entry-*.js"],
+          runtimeCaching: [
+            {
+              urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/assets\/(ondevice|worker-entry)-[^/]+\.js$/.test(url.pathname),
+              handler: "CacheFirst",
+              options: { cacheName: "spliteasy-ondevice-code", expiration: { maxEntries: 8 } }
+            },
+            {
+              // ONNX Runtime files, put there by the consented download (src/local/models.js); the runtime
+              // fetches them by URL, so serve them from the cache offline. (Models are read from the cache
+              // directly, so their server isn't routed here.)
+              urlPattern: ({ url }) => url.href.startsWith("https://cdn.jsdelivr.net/npm/onnxruntime-web@"),
+              handler: "CacheFirst",
+              options: { cacheName: "spliteasy-models-v1", cacheableResponse: { statuses: [200] } }
+            }
+          ],
           // pay.html carries the payment in its query string; match the cached page regardless of params
           ignoreURLParametersMatching: [/.*/],
           navigateFallbackDenylist: [/\/pay\.html/]

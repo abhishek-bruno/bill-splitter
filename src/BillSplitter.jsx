@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey } from "./vision.js";
+import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey, isLocalProvider } from "./vision.js";
+import { ENGINES, isEngineReady, downloadEngine, removeEngine } from "./local/models.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
 import InstallBanner from "./InstallPrompt.jsx";
 import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy, upiRequest, copyText, sharesOf, isUneven } from "./payment.js";
@@ -361,18 +362,136 @@ function ApiKeySettings({ config, onSave, onCancel, heading = true, children }) 
   );
 }
 
-// The key form as a bottom sheet, opened from the scan flow and from Settings
+// How bills are read, as a bottom sheet (scan flow and Settings): on this device, or a cloud AI with your key
 function ApiKeySheet({ config, onSave, onClose, onRemove }) {
+  const local = isLocalProvider(config?.provider);
+  // New users start on the free on-device tab; people with a cloud key start on theirs
+  const [tab, setTab] = useState(config && !local ? "cloud" : "device");
   return (
-    <Sheet title="Connect a vision API" onClose={onClose}>
-      <ApiKeySettings config={config} onSave={onSave} onCancel={onClose} heading={false}>
-        {config && onRemove && (
-          <button onClick={onRemove} style={{ ...linkBtn, color: "var(--danger)", margin: "0 auto 16px" }}>Remove saved key</button>
-        )}
-      </ApiKeySettings>
+    <Sheet title="How to read bills" onClose={onClose}>
+      <div role="tablist" style={{ display: "flex", gap: 4, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, marginBottom: 16 }}>
+        {[["device", "On this device"], ["cloud", "Cloud AI"]].map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} style={{
+            flex: 1, border: "none", borderRadius: 8, padding: "8px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            background: tab === id ? "var(--surface)" : "transparent", color: tab === id ? "var(--accent)" : "var(--muted)",
+            boxShadow: tab === id ? "0 1px 3px #0001" : "none"
+          }}>{label}</button>
+        ))}
+      </div>
+      {tab === "device" ? (
+        <LocalEngines config={config} onUse={(id) => onSave({ provider: `local-${id}` })} onRemoved={(id) => { if (config?.provider === `local-${id}`) onRemove?.(); }} />
+      ) : (
+        <ApiKeySettings config={local ? null : config} onSave={onSave} onCancel={onClose} heading={false}>
+          {config && !local && onRemove && (
+            <button onClick={onRemove} style={{ ...linkBtn, color: "var(--danger)", margin: "0 auto 16px" }}>Remove saved key</button>
+          )}
+        </ApiKeySettings>
+      )}
     </Sheet>
   );
 }
+
+// On-device readers: nothing downloads until the user agrees; then Use / Remove
+function LocalEngines({ config, onUse, onRemoved }) {
+  const [ready, setReady] = useState({}); // engine id -> downloaded
+  const [asking, setAsking] = useState(null); // engine id awaiting consent
+  const [progress, setProgress] = useState(null); // { id, value }
+  const [error, setError] = useState("");
+  const [removing, setRemoving] = useState(null);
+  const abortRef = useRef(null);
+
+  useEffect(() => {
+    Promise.all(Object.keys(ENGINES).map(async id => [id, await isEngineReady(id)])).then(list => setReady(Object.fromEntries(list)));
+  }, []);
+
+  const start = async (id) => {
+    setAsking(null); setError("");
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setProgress({ id, value: 0 });
+    try {
+      await downloadEngine(id, { signal: ctrl.signal, onProgress: v => setProgress({ id, value: v }) });
+      await import("./local/basicScan.js"); // fetch the reader's code too, so it works offline
+      setReady(r => ({ ...r, [id]: true }));
+      setProgress(null);
+      onUse(id); // they chose this reader; use it straight away
+    } catch (e) {
+      setProgress(null);
+      if (e.name !== "AbortError") setError(e.message || "Download failed. Try again.");
+    }
+  };
+
+  const remove = async (id) => {
+    setRemoving(null);
+    await removeEngine(id);
+    setReady(r => ({ ...r, [id]: false }));
+    onRemoved(id);
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>Free, private, and works offline. Bill photos never leave this device.</div>
+      {Object.entries(ENGINES).map(([id, e]) => {
+        const inUse = config?.provider === `local-${id}`;
+        const busy = progress?.id === id;
+        return (
+          <div key={id} style={{ border: `1.5px solid ${inUse ? "var(--accent)" : "var(--border)"}`, borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>{e.label}</span>
+              <span style={{ fontSize: 12, color: "var(--subtle)" }}>{e.sizeMB} MB</span>
+              {inUse && <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, color: "var(--accent)" }}><CheckIcon size={11} /> In use</span>}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 10px", lineHeight: 1.4 }}>{e.blurb}</div>
+            {busy ? (
+              <div>
+                <div style={{ height: 6, borderRadius: 3, background: "var(--surface-2)", overflow: "hidden" }}>
+                  <div style={{ width: `${Math.round(progress.value * 100)}%`, height: "100%", background: "var(--accent)", transition: "width .2s" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
+                  <span>Downloading… {Math.round(progress.value * 100)}%</span>
+                  <button onClick={() => abortRef.current?.abort()} style={{ ...linkBtn, fontSize: 12, color: "var(--muted)", textDecoration: "underline" }}>Cancel</button>
+                </div>
+              </div>
+            ) : asking === id ? (
+              // Consent: what downloads, how big, from where, and that photos stay here
+              <div style={{ background: "var(--surface-2)", borderRadius: 8, padding: "10px 12px" }}>
+                <div style={{ fontSize: 13, lineHeight: 1.45, marginBottom: 10 }}>
+                  Download about <b>{e.sizeMB} MB</b> once? It comes from {e.source}. After that it works offline. Wi-Fi recommended.
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setAsking(null)} style={outlineBtn()}>Not now</button>
+                  <button onClick={() => start(id)} style={{ ...outlineBtn("#fff", "var(--accent)"), background: "var(--accent)" }}>Download</button>
+                </div>
+              </div>
+            ) : ready[id] ? (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {!inUse && <button onClick={() => onUse(id)} style={{ ...outlineBtn("var(--accent)", "var(--accent)") }}>Use this</button>}
+                <button onClick={() => setRemoving(id)} style={{ ...linkBtn, fontSize: 12, color: "var(--subtle)", textDecoration: "underline", marginLeft: inUse ? 0 : 4 }}>Remove download</button>
+              </div>
+            ) : (
+              <button onClick={() => setAsking(id)} disabled={!!progress} style={{ ...outlineBtn("var(--accent)", "var(--accent)"), width: "100%" }}>Download · {e.sizeMB} MB</button>
+            )}
+          </div>
+        );
+      })}
+      {error && <div style={{ fontSize: 13, color: "var(--danger)", marginTop: 4 }}>{error}</div>}
+      {removing && (
+        <ConfirmModal
+          title={`Remove the ${ENGINES[removing].label} reader?`}
+          message={`Are you sure? This frees about ${ENGINES[removing].sizeMB} MB. You can download it again later.`}
+          confirmLabel="Remove"
+          onCancel={() => setRemoving(null)}
+          onConfirm={() => remove(removing)}
+        />
+      )}
+    </div>
+  );
+}
+
+// "Google Gemini" or "the on-device reader (Basic)" for a saved config
+const readerLabel = (cfg) => isLocalProvider(cfg?.provider)
+  ? `the on-device reader (${ENGINES[cfg.provider.slice(6)]?.label || "on device"})`
+  : PROVIDERS[cfg?.provider]?.label || "";
 
 // Small per-device preferences; storage can be unavailable (private mode), so failures are ignored
 const TAX_SPLIT_PREF = "spliteasy:taxSplit";
@@ -396,6 +515,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [scanned, setScanned] = useState(false);
+  const [scanCheck, setScanCheck] = useState(null); // on-device reader: printed vs computed total
   const [dragging, setDragging] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const cameraRef = useRef();
@@ -447,6 +567,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       if (bill.currency) setCurrency(bill.currency);
       setItems(toRows(bill.items, "1"));
       setTaxes(toRows(bill.taxes, "t1"));
+      setScanCheck(bill.scanCheck || null);
       setScanned(true);
       setMode("manual");
     } catch (e) {
@@ -511,7 +632,9 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   }, [mode, apiConfig]);
 
   // Landing: pick mode
-  const scanDefault = !!apiConfig && online;
+  const localReader = isLocalProvider(apiConfig?.provider);
+  const canScan = online || localReader; // the on-device reader works offline
+  const scanDefault = !!apiConfig && canScan;
   const optionStyle = (primary) => ({
     display: "flex", alignItems: "center", gap: 14, borderRadius: 14, padding: "13px 16px",
     cursor: "pointer", textAlign: "left", width: "100%",
@@ -548,9 +671,10 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
             <span>
               <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: scanDefault ? "var(--accent)" : "var(--text)" }}>Scan bill photo</span>
               <span style={{ display: "block", fontSize: 12, color: scanDefault ? "var(--accent-muted)" : "var(--subtle)", marginTop: 2 }}>
-                {!online ? "Needs internet. You're offline right now."
+                {localReader ? "Reads the bill on this device, works offline"
+                  : !online ? "Needs internet. You're offline right now."
                   : apiConfig ? `AI reads the items using ${PROVIDERS[apiConfig.provider].label}`
-                  : "AI reads the items using your own AI key"}
+                  : "Reads items with an on-device reader or your own AI key"}
               </span>
             </span>
           </button>
@@ -574,7 +698,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       <div>
         {topBar}
         {keySheetEl}
-        {!online && (
+        {!canScan && (
           <div style={{ fontSize: 13, color: "var(--warn-text)", background: "var(--warn-soft)", border: "1px solid var(--warn-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 12 }}>
             You're offline. Scanning needs internet.
           </div>
@@ -605,11 +729,11 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
               {!preview && <div style={{ fontSize: 40 }}>🧾</div>}
               {!preview && <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Add a photo of the bill</div>}
               <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 320 }}>
-                <button onClick={() => cameraRef.current.click()} disabled={!online} style={{
+                <button onClick={() => cameraRef.current.click()} disabled={!canScan} style={{
                   flex: 1, border: "none", borderRadius: 10, padding: "11px 8px", fontWeight: 700, fontSize: 14,
                   background: online ? "var(--accent)" : "var(--border)", color: online ? "#fff" : "var(--subtle)", cursor: online ? "pointer" : "default"
                 }}>📷 {preview ? "Retake" : "Camera"}</button>
-                <button onClick={() => galleryRef.current.click()} disabled={!online} style={{
+                <button onClick={() => galleryRef.current.click()} disabled={!canScan} style={{
                   flex: 1, border: "1.5px solid var(--border)", borderRadius: 10, padding: "11px 8px", fontWeight: 600, fontSize: 14,
                   background: "var(--surface)", color: online ? "var(--text-2)" : "var(--subtle)", cursor: online ? "pointer" : "default"
                 }}>🖼️ Gallery</button>
@@ -618,7 +742,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           )}
         </div>
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, marginTop: 12, fontSize: 13, color: "var(--subtle)" }}>
-          Using {PROVIDERS[apiConfig.provider].label} ·
+          Using {readerLabel(apiConfig)} ·
           <button onClick={() => setKeySheet("change")} disabled={loading} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 600 }}>Change</button>
         </div>
         {error && (
@@ -626,7 +750,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
             <div>{error}</div>
             <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
               {lastFile && (
-                <button onClick={() => scanFile(lastFile)} disabled={!online} style={{ color: online ? "var(--accent)" : "var(--subtle)", background: "none", border: "none", cursor: online ? "pointer" : "default", fontWeight: 700, fontSize: 13, padding: 0 }}>↻ Retry</button>
+                <button onClick={() => scanFile(lastFile)} disabled={!canScan} style={{ color: canScan ? "var(--accent)" : "var(--subtle)", background: "none", border: "none", cursor: canScan ? "pointer" : "default", fontWeight: 700, fontSize: 13, padding: 0 }}>↻ Retry</button>
               )}
               <button onClick={() => { setMode("manual"); setError(""); }} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>Enter manually <ArrowRightIcon size={13} /></button>
             </div>
@@ -642,11 +766,16 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const scannedTotal = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0) + taxes.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   return (
     <div className="fill">
-      {scanned && (
-        <div style={{ fontSize: 13, color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>
-          <CheckIcon size={13} /> Scanned. Check the items against the bill (total {currency}{scannedTotal.toFixed(2)}) and fix anything the AI misread.
+      {scanned && (scanCheck && !scanCheck.matches ? (
+        // The reader's items don't add up to the printed total: point at the gap
+        <div style={{ fontSize: 13, color: "var(--warn-text)", background: "var(--warn-soft)", border: "1px solid var(--warn-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>
+          Scanned, but this adds up to {currency}{scannedTotal.toFixed(2)} while the bill says {currency}{scanCheck.printedTotal.toFixed(2)}. Check for missed or misread lines.
         </div>
-      )}
+      ) : (
+        <div style={{ fontSize: 13, color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>
+          <CheckIcon size={13} /> Scanned{scanCheck?.matches ? " and it matches the bill total" : ""}. Check the items against the bill (total {currency}{scannedTotal.toFixed(2)}) and fix anything misread.
+        </div>
+      ))}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginBottom: 16 }}>
         <div style={{ flex: 2 }}>
           <label style={{ display: "block", fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Restaurant / Place</label>
@@ -1400,6 +1529,17 @@ function SettingsPage({ onClose, onKeyChanged, onEraseAll, savedNames, setSavedN
     flash("API key saved.");
   };
 
+  // On-device reader: delete its downloaded files and stop using it
+  const removeLocalReader = async () => {
+    const id = config.provider.slice(6);
+    if (!window.confirm(`Remove the on-device reader? This frees about ${ENGINES[id]?.sizeMB} MB.`)) return;
+    await removeEngine(id);
+    await deleteSecret("vision");
+    setConfig(null);
+    onKeyChanged();
+    flash("On-device reader removed.");
+  };
+
   const removeKey = async () => {
     if (!window.confirm("Remove the saved API key from this device?")) return;
     await deleteSecret("vision");
@@ -1446,10 +1586,25 @@ function SettingsPage({ onClose, onKeyChanged, onEraseAll, savedNames, setSavedN
         <PaymentSettings payment={payment} setPayment={setPayment} flash={flash} />
       </div>
 
-      <div style={sectionTitle}>Bill scanning API key</div>
+      <div style={sectionTitle}>Bill scanning</div>
       <div style={card}>
         {editing && <ApiKeySheet config={config} onSave={saveKey} onClose={() => setEditing(false)} />}
-        {config === undefined ? null : config ? (
+        {config === undefined ? null : isLocalProvider(config?.provider) ? (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 6 }}>
+              <span style={{ color: "var(--muted)" }}>Reader</span>
+              <span style={{ fontWeight: 600 }}>On this device · {ENGINES[config.provider.slice(6)]?.label}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 14 }}>
+              <span style={{ color: "var(--muted)" }}>Storage</span>
+              <span style={{ fontWeight: 600 }}>About {ENGINES[config.provider.slice(6)]?.sizeMB} MB</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setEditing(true)} style={outlineBtn()}>Change</button>
+              <button onClick={removeLocalReader} style={outlineBtn("var(--danger)", "var(--danger-border)")}>Remove</button>
+            </div>
+          </>
+        ) : config ? (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 6 }}>
               <span style={{ color: "var(--muted)" }}>Provider</span>
@@ -1470,8 +1625,8 @@ function SettingsPage({ onClose, onKeyChanged, onEraseAll, savedNames, setSavedN
           </>
         ) : (
           <>
-            <div style={{ fontSize: 14, color: "var(--muted)", marginBottom: 12 }}>No key saved. Add one to scan bill photos.</div>
-            <button onClick={() => setEditing(true)} style={{ ...outlineBtn("var(--accent)", "var(--accent)"), width: "100%" }}>Add API key</button>
+            <div style={{ fontSize: 14, color: "var(--muted)", marginBottom: 12 }}>Choose an on-device reader or add an AI key to scan bill photos.</div>
+            <button onClick={() => setEditing(true)} style={{ ...outlineBtn("var(--accent)", "var(--accent)"), width: "100%" }}>Set up scanning</button>
           </>
         )}
       </div>
