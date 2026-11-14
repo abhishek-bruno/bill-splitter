@@ -556,6 +556,34 @@ const readerLabel = (cfg) => isLocalProvider(cfg?.provider)
   ? `On Device AI (${ENGINES[cfg.provider.slice(6)]?.label || "Basic"})`
   : PROVIDERS[cfg?.provider]?.label || "";
 
+// The scanned bill photo survives a refresh: a reduced JPEG kept in Cache Storage until the split is reset
+const PHOTO_CACHE = "spliteasy-scan-photo", PHOTO_KEY = "/scan-photo";
+async function storeScanPhoto(file) {
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.85));
+    canvas.width = canvas.height = 0;
+    await (await caches.open(PHOTO_CACHE)).put(PHOTO_KEY, new Response(blob, { headers: { "Content-Type": "image/jpeg" } }));
+  } catch { /* storage unavailable: the photo just won't survive a refresh */ }
+}
+async function loadScanPhoto() {
+  try {
+    const res = await (await caches.open(PHOTO_CACHE)).match(PHOTO_KEY);
+    return res ? new File([await res.blob()], "bill.jpg", { type: "image/jpeg" }) : null;
+  } catch { return null; }
+}
+const clearScanPhoto = () => { try { caches.delete(PHOTO_CACHE); } catch { /* unavailable */ } };
+// Drops the bill form's draft from storage (before the form remounts on Reset / a new split)
+const clearBillDraft = () => {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...loadAll(), billDraft: null })); } catch { /* unavailable */ }
+  clearScanPhoto();
+};
+
 // Small per-device preferences; storage can be unavailable (private mode), so failures are ignored
 const TAX_SPLIT_PREF = "spliteasy:taxSplit";
 const ROUND_OFF_PREF = "spliteasy:roundOff";
@@ -563,15 +591,18 @@ const readPref = (key) => { try { return localStorage.getItem(key); } catch { re
 const writePref = (key, value) => { try { localStorage.setItem(key, value); } catch { /* storage unavailable */ } };
 
 function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack }) {
+  // An unfinished form is saved as a draft, so a refresh doesn't lose it; a submitted bill takes priority
+  const [draft, setDraft] = usePersisted("billDraft", null);
+  const start = initial ? null : draft;
   const [error, setError] = useState("");
-  const [restaurant, setRestaurant] = useState(initial?.restaurant === "My Bill" ? "" : initial?.restaurant || "");
-  const [currency, setCurrency] = useState(initial?.currency || "₹");
-  const [items, setItems] = useState(() => toRows(initial?.items, "1"));
-  const [taxes, setTaxes] = useState(() => toRows(initial?.taxes, "t1"));
+  const [restaurant, setRestaurant] = useState(initial ? (initial.restaurant === "My Bill" ? "" : initial.restaurant || "") : start?.restaurant || "");
+  const [currency, setCurrency] = useState(initial?.currency || start?.currency || "₹");
+  const [items, setItems] = useState(() => toRows(initial?.items || start?.items, "1"));
+  const [taxes, setTaxes] = useState(() => toRows(initial?.taxes || start?.taxes, "t1"));
   // "equal" | "proportional", chosen on the Assign step. A new bill starts with the last choice made on this device.
   const [taxSplit] = useState(() => initial?.taxSplit || readPref(TAX_SPLIT_PREF) || "equal");
   // Round the total to the nearest rupee; a new bill starts with the last choice made on this device
-  const [roundOff, setRoundOffState] = useState(() => initial?.roundOff ?? readPref(ROUND_OFF_PREF) === "1");
+  const [roundOff, setRoundOffState] = useState(() => initial?.roundOff ?? start?.roundOff ?? readPref(ROUND_OFF_PREF) === "1");
   const setRoundOff = (on) => { setRoundOffState(on); writePref(ROUND_OFF_PREF, on ? "1" : "0"); };
   const [showPhoto, setShowPhoto] = useState(false);
 
@@ -581,8 +612,8 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const [keySheet, setKeySheet] = useState(null);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [scanned, setScanned] = useState(false);
-  const [scanCheck, setScanCheck] = useState(null); // on-device reader: printed vs computed total
+  const [scanned, setScanned] = useState(!!start?.scanned);
+  const [scanCheck, setScanCheck] = useState(start?.scanCheck || null); // printed vs computed total
   const [online, setOnline] = useState(navigator.onLine);
   const cameraRef = useRef();
   const galleryRef = useRef();
@@ -615,6 +646,13 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
 
   const [lastFile, setLastFile] = useState(null); // kept so a failed scan can be retried without retaking the photo
 
+  // After a refresh, bring back the scanned photo for the bill card
+  useEffect(() => {
+    if (!scanned || lastFile) return;
+    loadScanPhoto().then(f => { if (f) { setLastFile(f); setPreview(URL.createObjectURL(f)); } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // A photo from the camera or gallery goes straight to the reading screen
   const scanRun = useRef(0); // bumping it makes an in-flight scan's result be ignored (Cancel)
   const handleFile = (file) => {
@@ -622,6 +660,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
     if (!file.type?.startsWith("image/")) { setError("Please choose an image file."); return; }
     setPreview(URL.createObjectURL(file));
     setLastFile(file);
+    storeScanPhoto(file);
     setMode("upload");
     scanFile(file);
   };
@@ -689,6 +728,11 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   };
 
   const formHasData = !!restaurant.trim() || [...items, ...taxes].some(x => x.name.trim() || String(x.amount).trim());
+  // Keep the draft in step with the form (cleared once there's nothing in it)
+  useEffect(() => {
+    setDraft(formHasData || scanned ? { restaurant, currency, items, taxes, roundOff, scanned, scanCheck } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restaurant, currency, items, taxes, roundOff, scanned, scanCheck]);
   // Mode changes can come from the browser back button, so reset per-screen state here
   useEffect(() => {
     if (mode !== "upload") setError("");
@@ -828,12 +872,14 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
             <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           </button>
         )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: warn ? "var(--warn-text)" : "var(--success-text)" }}>
-            {warn ? `Adds up to ${currency}${scanSum.toFixed(2)}, bill says ${currency}${scanCheck.printedTotal.toFixed(2)}`
-              : <><CheckIcon size={12} /> {scanCheck?.matches ? `Matches the bill total` : "Scanned. Check against the bill"}</>}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
+          {/* Icon and text centred on one line, starting at the same edge as the buttons below */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, lineHeight: "18px", fontWeight: 600, color: warn ? "var(--warn-text)" : "var(--success-text)" }}>
+            {!warn && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, display: "block" }}><path d="M20 6 9 17l-5-5" /></svg>}
+            <span>{warn ? `Adds up to ${currency}${scanSum.toFixed(2)}, bill says ${currency}${scanCheck.printedTotal.toFixed(2)}`
+              : scanCheck?.matches ? "Matches the bill total" : "Scanned. Check against the bill"}</span>
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => cameraRef.current.click()} style={cardBtn}><CameraIcon size={15} /> Retake</button>
             {lastFile && <button onClick={() => setShowPhoto(true)} style={cardBtn}><PhotoIcon size={15} /> View</button>}
           </div>
@@ -1898,12 +1944,14 @@ export default function BillSplitter() {
   const [resetCount, setResetCount] = useState(0);
 
   const resetSplit = () => {
+    clearBillDraft();
     setStep(0); setBill(null); setPeople([]); setAssignments({}); setSplitId(null); setBillMode(null);
     setResetCount(n => n + 1); // remount BillStep so its draft form is cleared too
   };
 
   const eraseAll = () => {
     try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(HISTORY_KEY); } catch { /* storage unavailable */ }
+    clearScanPhoto();
     setSavedNames([]);
     setPayment(null);
     setHistory([]);
