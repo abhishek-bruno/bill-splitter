@@ -1743,10 +1743,27 @@ function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, o
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.group ? `Paid by ${r.payee}` : `To ${r.payee}`} · {new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                {r.group ? `Group · paid by ${r.payee}` : `To ${r.payee}`} · {new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
               </div>
             </div>
-            <div style={{ fontWeight: 700, color: "var(--text)", flexShrink: 0 }}>{r.c}{Number(r.amount).toFixed(2)}</div>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              {/* A group link shows the bill total until the reader marks their own row, then their share */}
+              {(() => {
+                const mine = r.group ? r.paid && r.share != null : true;
+                const done = r.paid || r.paidByPayer;
+                return (
+                  <>
+                    <div style={{ fontWeight: 700, color: "var(--text)" }}>{r.c}{Number(mine && r.group ? r.share : r.amount).toFixed(2)}</div>
+                    {mine && (
+                      <div style={{
+                        display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 700, borderRadius: 10, padding: "2px 8px",
+                        background: done ? "var(--success-soft)" : "var(--warn-soft)", color: done ? "var(--success-text)" : "var(--warn-text)"
+                      }}>{done ? "Paid" : "To pay"}</div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </button>
         ))}
       </div>

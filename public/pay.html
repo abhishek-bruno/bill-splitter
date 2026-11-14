@@ -75,6 +75,12 @@
       :root:not([data-theme]) .icon .sun { display: inline; }
       :root:not([data-theme]) .icon .moon { display: none; }
     }
+    .mark { width: 100%; margin-top: 10px; font-weight: 600; font-size: 14px; }
+    .paid-note { margin-top: 4px; font-size: 14px; font-weight: 600; color: #16a34a; }
+    .paid-note button { border: none; padding: 0 0 0 6px; font-size: 13px; font-weight: 500; color: var(--muted); text-decoration: underline; }
+    .pick { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+    .pick-label { width: 100%; font-size: 13px; color: var(--muted); margin-bottom: 2px; }
+    .pick button { font-size: 14px; font-weight: 600; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -195,6 +201,27 @@
 
       function money(c, n) { return c + n.toFixed(2); }
 
+      // Saved requests (shown in the app under History > Requests). Each opened link is kept, newest first,
+      // with whether the reader marked their own share paid (on a group link, also which person they are: me)
+      var REQ_KEY = "spliteasy:requests";
+      var HASH = location.hash.slice(1);
+      function loadReqs() { try { return JSON.parse(localStorage.getItem(REQ_KEY) || "[]"); } catch (e) { return []; } }
+      function saveReqs(list) { try { localStorage.setItem(REQ_KEY, JSON.stringify(list.slice(0, 50))); } catch (e) { /* storage unavailable */ } }
+      function myReq() { return loadReqs().filter(function (x) { return x.id === HASH; })[0] || {}; }
+      function remember(r) {
+        var list = loadReqs(), old = list.filter(function (x) { return x.id === HASH; })[0] || {};
+        r.id = HASH; r.savedAt = Date.now(); r.paid = old.paid;
+        if (r.group) { r.me = old.me; r.who = old.who; r.share = old.share; }
+        saveReqs([r].concat(list.filter(function (x) { return x.id !== HASH; })));
+      }
+      function patchReq(patch) {
+        saveReqs(loadReqs().map(function (x) {
+          if (x.id !== HASH) return x;
+          for (var k in patch) x[k] = patch[k];
+          return x;
+        }));
+      }
+
       // UPI only when a valid ID was sent and the bill is in rupees
       function hasUpi(v) { return v.c === "₹" && UPI.test(v.upi); }
       function upiHref(v, amount) {
@@ -245,6 +272,29 @@
           showUpiId(v);
         } else settleHint(v);
 
+        // Mark as paid, to keep track in the app; once paid the pay options step aside
+        var mark = el("button", "mark", "Mark as paid"), note = el("div", "paid-note");
+        mark.type = "button";
+        card.insertBefore(mark, $("toggle"));
+        card.insertBefore(note, $("toggle"));
+        function paintPaid() {
+          var byPayer = v.everyone && v.everyone[v.me] && v.everyone[v.me].paid, mine = !!myReq().paid, paid = byPayer || mine;
+          mark.hidden = paid;
+          note.hidden = !paid;
+          note.textContent = byPayer ? "\u2713 Marked paid by " + (v.payee || "the payer") : "\u2713 You marked your share paid";
+          if (mine && !byPayer) {
+            var undo = el("button", null, "Undo");
+            undo.type = "button";
+            undo.addEventListener("click", function () { patchReq({ paid: false }); paintPaid(); });
+            note.appendChild(undo);
+          }
+          ["gpay", "pay", "upibox"].forEach(function (id) { if (hasUpi(v) && (id !== "gpay" || $("gpay").href)) $(id).hidden = paid; });
+          var hint = card.querySelector(".hint");
+          if (hint) hint.hidden = paid;
+        }
+        mark.addEventListener("click", function () { patchReq({ paid: true }); paintPaid(); });
+        paintPaid();
+
         if (v.everyone) renderSplit(v, false);
       }
 
@@ -258,6 +308,49 @@
         renderSplit(v, true);
         // "Or pay manually" reads right only after the per-person pay buttons
         card.appendChild($("upibox"));
+        groupPaid(v);
+      }
+
+      // Same Mark as paid as on a personal link; on a group link it first asks which person the reader is
+      function groupPaid(v) {
+        var people = v.everyone.map(function (p, i) { return { p: p, i: i }; }).filter(function (x) { return x.i > 0 && !x.p.paid; });
+        var mark = el("button", "mark", "Mark as paid"), pick = el("div", "pick"), note = el("div", "paid-note");
+        mark.type = "button";
+        pick.hidden = true;
+        [mark, pick, note].forEach(function (n) { card.appendChild(n); });
+        function choose(x) {
+          patchReq({ paid: true, me: x.i, who: x.p.name, share: Math.round(x.p.total * 100) / 100 });
+          refresh();
+        }
+        function refresh() {
+          var req = myReq(), mine = req.paid && req.me != null;
+          $("split").textContent = "";
+          renderSplit(v, true);
+          pick.hidden = true;
+          mark.hidden = mine || !people.length;
+          note.hidden = !mine;
+          note.textContent = mine ? "\u2713 You marked your share paid (" + req.who + ")" : "";
+          if (mine) {
+            var undo = el("button", null, "Undo");
+            undo.type = "button";
+            undo.addEventListener("click", function () { patchReq({ paid: false, me: undefined, who: undefined, share: undefined }); refresh(); });
+            note.appendChild(undo);
+          }
+        }
+        mark.addEventListener("click", function () {
+          if (people.length === 1) return choose(people[0]);
+          pick.textContent = "";
+          pick.appendChild(el("div", "pick-label", "Which one are you?"));
+          people.forEach(function (x) {
+            var b = el("button", null, x.p.name + " \u00b7 " + money(v.c, x.p.total));
+            b.type = "button";
+            b.addEventListener("click", function () { choose(x); });
+            pick.appendChild(b);
+          });
+          mark.hidden = true;
+          pick.hidden = false;
+        });
+        refresh();
       }
 
       function renderSplit(v, open) {
@@ -274,7 +367,10 @@
           top.appendChild(el("span", null, money(v.c, p.total)));
           row.appendChild(top);
           if (p.lines.length) row.appendChild(el("div", "lines", p.lines.map(function (l) { return l[0] + " " + money(v.c, l[1]); }).join(" · ")));
-          if (open && i > 0 && !p.paid && hasUpi(v)) {
+          // The reader's own row once they marked themselves paid (see groupPaid)
+          var req = open ? myReq() : {}, isMe = req.paid && req.me === i;
+          if (isMe) who.appendChild(el("span", "tag ok", "\u2713 you paid"));
+          if (open && i > 0 && !p.paid && !isMe && hasUpi(v)) {
             var btn = el("a", "pay small", "Pay " + money(v.c, p.total) + " with UPI");
             btn.href = upiHref(v, Math.round(p.total * 100) / 100);
             row.appendChild(btn);
@@ -306,34 +402,25 @@
       });
 
       // Every opened request is kept on this device, so it can be found again in the app (History > Requests)
-      function remember(hash, r) {
-        try {
-          var key = "spliteasy:requests";
-          var list = JSON.parse(localStorage.getItem(key) || "[]").filter(function (x) { return x.id !== hash; });
-          r.id = hash; r.savedAt = Date.now();
-          list.unshift(r);
-          localStorage.setItem(key, JSON.stringify(list.slice(0, 50)));
-        } catch (e) { /* storage unavailable */ }
-      }
 
-      var hash = location.hash.slice(1);
+      var hash = HASH;
       if (hash) {
         try {
           var s = unpack(hash);
           var everyone = shares(s);
           var billTotal = everyone.reduce(function (t, p) { return t + p.total; }, 0);
           if (s.me === -1) {
+            remember({ title: s.note || "Bill split", c: s.c, amount: Math.round(billTotal * 100) / 100, group: true, payee: everyone[0].name });
             renderGroup({ c: s.c, payee: s.payee, note: s.note, upi: s.upi, everyone: everyone });
-            remember(hash, { title: s.note || "Bill split", c: s.c, amount: Math.round(billTotal * 100) / 100, group: true, payee: everyone[0].name });
             return;
           }
           var mine = everyone[s.me];
           if (!mine) throw new Error("bad");
+          remember({ title: s.note || "Bill split", c: s.c, amount: Math.round(mine.total * 100) / 100, who: mine.name, payee: s.payee, paidByPayer: mine.paid });
           render({
             c: s.c, payee: s.payee, note: s.note, upi: s.upi, me: s.me, who: mine.name,
             amount: Math.round(mine.total * 100) / 100, lines: mine.lines, everyone: everyone
           });
-          remember(hash, { title: s.note || "Bill split", c: s.c, amount: Math.round(mine.total * 100) / 100, who: mine.name, payee: s.payee });
         } catch (e) { console.error(e); fail(); }
         return;
       }
