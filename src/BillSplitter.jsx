@@ -1468,6 +1468,7 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
               </button>
               {upiRequest({ bill, person: p, people, payment }) && (
                 <button onClick={() => setQrPerson(p)} aria-label={`Show UPI QR for ${p.name}`} title="Show QR to scan and pay" style={{
+                  order: -1, // QR on the left, Share at the right end (thumb side)
                   flex: 1, borderRadius: 8, padding: "8px 12px", fontWeight: 600, fontSize: 13, cursor: "pointer",
                   border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)",
                   display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6

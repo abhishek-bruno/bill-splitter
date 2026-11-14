@@ -138,7 +138,7 @@ export function buildShareText({ bill, person, assignments, people, payment, pai
   const page = payPageLink({ bill, person, assignments, people, payment, paid });
   const greeting = `Hi ${person.name}, your share of the ${bill.restaurant} bill is *${money(c, person.total)}*.`;
   // Link first: chat apps show it as a preview card (and WhatsApp then hides the long URL)
-  if (page) return `${page}\n\n${greeting}\n${linkHint(bill, payment)}`;
+  if (page) return `${page}\n\n${greeting}\n\n${linkHint(bill, payment)}`;
   const lines = [greeting, "", ...itemLines({ bill, person, assignments }), ""];
   if (hasUpi(bill, payment)) lines.push(`UPI: ${payment.upiId}`);
   return lines.join("\n").trim();
