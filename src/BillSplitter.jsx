@@ -62,23 +62,18 @@ const toRows = (list, fallbackId) => list?.length
   ? list.map(x => ({ ...x, amount: String(x.amount) }))
   : [{ id: fallbackId, name: "", amount: "" }];
 
-// Saved people: most-recent-first { name, phone? }, deduped by name case-insensitively.
-// Older saves are plain name strings, so everything goes through asContact.
-const asContact = (x) => (typeof x === "string" ? { name: x } : x);
+// Saved people: most-recent-first { name }, deduped case-insensitively.
+// Older saves are plain name strings (and briefly carried a phone), so everything goes through asContact.
+const asContact = (x) => ({ name: typeof x === "string" ? x : x?.name || "" });
 const remember = (list, values, max) => {
   const out = [];
   [...values, ...list].map(asContact).forEach(c => {
-    const name = c.name?.trim();
-    if (!name) return;
-    const i = out.findIndex(x => x.name.toLowerCase() === name.toLowerCase());
-    if (i === -1) out.push(c.phone ? { name, phone: c.phone } : { name });
-    else if (!out[i].phone && c.phone) out[i] = { ...out[i], phone: c.phone }; // keep a number once known
+    const name = c.name.trim();
+    if (name && !out.some(x => x.name.toLowerCase() === name.toLowerCase())) out.push({ name });
   });
   return out.slice(0, max);
 };
 const forget = (list, name) => list.map(asContact).filter(x => x.name.toLowerCase() !== name.toLowerCase());
-// Contacts store numbers with spaces, dashes and brackets; keep digits and a leading +
-const cleanPhone = (tel) => (tel || "").trim().replace(/(?!^\+)[^\d]/g, "");
 
 // Red text button with an inline "Yes / No" confirm, skipped when needsConfirm is false
 function ConfirmButton({ label, prompt, onConfirm, needsConfirm = true, style }) {
@@ -589,89 +584,38 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
 const MAX_SAVED_NAMES = 30;
 const sameName = (a, b) => a.toLowerCase() === b.toLowerCase();
 
-// One row in the Recent list: tap the row to add the person, × to forget them
-function RecentRow({ contact, color, onPick, onForget, first }) {
+// One row in the Saved list: tap to add the person (forgetting lives in Settings > Saved people)
+function SavedRow({ contact, color, onPick, first }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", borderTop: first ? "none" : "1px solid var(--divider)" }}>
-      <button onClick={onPick} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", cursor: "pointer", padding: "10px 4px", textAlign: "left", fontFamily: "inherit", color: "var(--text)" }}>
-        <Avatar name={contact.name} color={color} size={32} />
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{contact.name}</span>
-          {contact.phone && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{contact.phone}</span>}
-        </span>
-        <span style={{ color: "var(--accent)", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>+ Add</span>
-      </button>
-      <button onClick={onForget} aria-label={`Forget ${contact.name}`} style={{ background: "none", border: "none", cursor: "pointer", padding: "8px 4px 8px 12px", fontSize: 18, lineHeight: 1, color: "var(--subtle)" }}>×</button>
-    </div>
+    <button onClick={onPick} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", borderTop: first ? "none" : "1px solid var(--divider)", cursor: "pointer", padding: "10px 4px", textAlign: "left", fontFamily: "inherit", color: "var(--text)" }}>
+      <Avatar name={contact.name} color={color} size={32} />
+      <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{contact.name}</span>
+      <span style={{ color: "var(--accent)", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>+ Add</span>
+    </button>
   );
 }
 
-function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
+function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames, onManageSaved }) {
   const [name, setName] = useState("");
 
-  // Adds several people at once ({ name, phone? } or plain names), skipping blanks and anyone already in
-  // the split, and remembers them (with their number) for the Recent list
-  const addPeople = (entries) => {
-    const contacts = entries.map(asContact).map(c => ({ ...c, name: (c.name || "").trim() })).filter(c => c.name);
-    if (!contacts.length) return;
-    setPeople(prev => {
-      const next = [...prev];
-      contacts.forEach(c => {
-        if (next.some(p => sameName(p.name, c.name))) return;
-        const used = new Set(next.map(p => p.color));
-        const color = COLORS.find(col => !used.has(col)) || COLORS[next.length % COLORS.length];
-        next.push({ id: `${Date.now()}-${next.length}`, name: c.name, color, ...(c.phone && { phone: c.phone }) });
-      });
-      return next;
-    });
-    setSavedNames(prev => remember(prev, contacts, MAX_SAVED_NAMES));
-  };
-
+  // Adds a person (skipping blanks and anyone already in the split) and remembers them for Saved
   const addPerson = (raw = name) => {
-    if (!raw.trim()) return;
-    addPeople([raw]);
+    const n = raw.trim();
+    if (!n) return;
     setName("");
+    if (people.some(p => sameName(p.name, n))) return;
+    setPeople(prev => {
+      const used = new Set(prev.map(p => p.color));
+      const color = COLORS.find(c => !used.has(c)) || COLORS[prev.length % COLORS.length];
+      return [...prev, { id: Date.now().toString(), name: n, color }];
+    });
+    setSavedNames(prev => remember(prev, [n], MAX_SAVED_NAMES));
   };
 
-  // Contact Picker API: Chrome on Android only, so the button is hidden elsewhere.
-  // Reads only the contacts the user ticks (name and first number); nothing leaves the device.
-  const canPickContacts = typeof navigator !== "undefined" && "contacts" in navigator && "select" in (navigator.contacts || {});
-  const [pickError, setPickError] = useState("");
-  const [pickInfo, setPickInfo] = useState("");
-  const pickContacts = async () => {
-    setPickError("");
-    setPickInfo("");
-    try {
-      // Asking for a property the browser doesn't offer rejects the whole call, so only ask for supported ones
-      const supported = await navigator.contacts.getProperties?.().catch(() => null);
-      const props = ["name", "tel"].filter(p => !supported || supported.includes(p));
-      const picked = await navigator.contacts.select(props, { multiple: true });
-      // Closing the picker resolves with []; contacts saved without a name fall back to their number
-      const contacts = (picked || []).map(c => {
-        const phone = cleanPhone(c.tel?.[0]) || undefined;
-        return { name: c.name?.find(n => n?.trim()) || phone || "", phone };
-      }).filter(c => c.name.trim());
-      const fresh = contacts.filter(c => !people.some(p => sameName(p.name, c.name)));
-      addPeople(contacts);
-      setPickInfo(
-        !picked?.length ? "No contacts were returned by the picker."
-        : !contacts.length ? `Picked ${picked.length}, but they had no name or number.`
-        : !fresh.length ? "Already in the split."
-        : `Added ${fresh.length} ${fresh.length === 1 ? "person" : "people"}.`
-      );
-    } catch (e) {
-      setPickError(`Couldn't read contacts (${e?.name || "error"}${e?.message ? `: ${e.message}` : ""}). Add names by typing instead.`);
-    }
-  };
-
-  const forgetName = (n) => setSavedNames(prev => forget(prev, n));
-
-  // Typing filters Recent by name or number
+  // Typing filters Saved
   const query = name.trim().toLowerCase();
-  const digits = query.replace(/\D/g, "");
   const suggestions = savedNames.map(asContact).filter(c =>
-    !people.some(p => sameName(p.name, c.name)) &&
-    (!query || c.name.toLowerCase().includes(query) || (digits && c.phone?.includes(digits)))
+    c.name && !people.some(p => sameName(p.name, c.name)) && (!query || c.name.toLowerCase().includes(query))
   );
 
   return (
@@ -696,23 +640,11 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
           borderRadius: 8, padding: "10px 18px", fontWeight: 600, cursor: "pointer", fontSize: 14
         }}>Add</button>
       </div>
-      {canPickContacts && (
-        <button onClick={pickContacts} style={{
-          background: "none", border: "1.5px dashed var(--border-strong)", borderRadius: 8,
-          padding: "8px 14px", color: "var(--muted)", cursor: "pointer", fontSize: 13,
-          width: "100%", marginBottom: 16
-        }}>👥 Add from contacts</button>
-      )}
-      {pickError && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: -8, marginBottom: 12 }}>{pickError}</div>}
-      {pickInfo && !pickError && <div style={{ color: "var(--muted)", fontSize: 12, marginTop: -8, marginBottom: 12 }}>{pickInfo}</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {people.map(p => (
           <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--surface)", border: "1px solid var(--divider)", borderRadius: 10, padding: "10px 14px" }}>
             <Avatar name={p.name} color={p.color} />
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: "block", fontWeight: 600 }}>{p.name}</span>
-              {p.phone && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{p.phone}</span>}
-            </span>
+            <span style={{ flex: 1, fontWeight: 600 }}>{p.name}</span>
             <button onClick={() => setPeople(prev => prev.filter(x => x.id !== p.id))} aria-label={`Remove ${p.name}`} style={{ background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
           </div>
         ))}
@@ -720,11 +652,17 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
       {people.length === 0 && <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 13, padding: "16px 0" }}>Add at least 2 people to split with</div>}
       {suggestions.length > 0 && (
         <div style={{ marginTop: 20 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--subtle)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.4 }}>Recent</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 4, fontSize: 12, color: "var(--subtle)" }}>
+            <span style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Saved</span>
+            <button onClick={onManageSaved} aria-label="Manage saved people" title="Manage" style={{ display: "inline-flex", background: "none", border: "none", padding: 4, color: "var(--accent)", cursor: "pointer" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M7 17 17 7" /><path d="M8 7h9v9" />
+              </svg>
+            </button>
+          </div>
           <div style={{ background: "var(--surface)", border: "1px solid var(--divider)", borderRadius: 10, padding: "0 12px" }}>
             {suggestions.map((c, i) => (
-              <RecentRow key={c.name} contact={c} color={COLORS[i % COLORS.length]} first={i === 0}
-                onPick={() => { addPeople([c]); setName(""); }} onForget={() => forgetName(c.name)} />
+              <SavedRow key={c.name} contact={c} color={COLORS[i % COLORS.length]} first={i === 0} onPick={() => addPerson(c.name)} />
             ))}
           </div>
         </div>
@@ -1099,7 +1037,13 @@ function PaymentSettings({ payment, setPayment, flash }) {
   );
 }
 
-function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNames, setSavedNames, payment, setPayment, historyCount, onClearHistory, theme, setTheme }) {
+function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNames, setSavedNames, payment, setPayment, historyCount, onClearHistory, theme, setTheme, focus, onFocused }) {
+  // Opened from a shortcut (e.g. Saved > Manage): jump to that section once
+  useEffect(() => {
+    if (!focus) return;
+    document.getElementById(focus)?.scrollIntoView({ block: "start" });
+    onFocused?.();
+  }, [focus, onFocused]);
   const [config, setConfig] = useState(undefined);
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState("");
@@ -1131,7 +1075,7 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
   };
 
   const eraseAll = async () => {
-    if (!window.confirm("Erase all SplitEasy data on this device, including history, saved names, your UPI ID and the API key? This can't be undone.")) return;
+    if (!window.confirm("Erase all SplitEasy data on this device, including history, saved people, your UPI ID and the API key? This can't be undone.")) return;
     await clearAllSecrets();
     onEraseAll();
     setConfig(null);
@@ -1203,20 +1147,17 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
         )}
       </div>
 
-      <div style={sectionTitle}>Saved people</div>
+      <div id="saved-people" style={{ ...sectionTitle, scrollMarginTop: 16 }}>Saved people</div>
       <div style={card}>
         {savedNames.length === 0 ? (
-          <div style={{ fontSize: 14, color: "var(--muted)" }}>People you add to a split (with their number, when picked from contacts) are kept on this device and suggested next time.</div>
+          <div style={{ fontSize: 14, color: "var(--muted)" }}>People you add to a split are kept on this device and suggested next time.</div>
         ) : (
           <>
             <div style={{ display: "flex", flexDirection: "column", marginBottom: 12 }}>
               {savedNames.map(asContact).map((c, i) => (
                 <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid var(--divider)" : "none" }}>
                   <Avatar name={c.name} color={COLORS[i % COLORS.length]} size={28} />
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", fontWeight: 600, fontSize: 14 }}>{c.name}</span>
-                    {c.phone && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{c.phone}</span>}
-                  </span>
+                  <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{c.name}</span>
                   <button onClick={() => setSavedNames(prev => forget(prev, c.name))} aria-label={`Forget ${c.name}`} style={{ background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: "2px 6px" }}>×</button>
                 </div>
               ))}
@@ -1229,7 +1170,7 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
       <div style={sectionTitle}>Data on this device</div>
       <div style={card}>
         <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>
-          Your split in progress, history, saved names, UPI ID and API key are stored only in this browser. Nothing is uploaded except bill photos you choose to scan.
+          Your split in progress, history, saved people, UPI ID and API key are stored only in this browser. Nothing is uploaded except bill photos you choose to scan.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button onClick={clearSplit} style={outlineBtn()}>Clear current split</button>
@@ -1345,6 +1286,7 @@ export default function BillSplitter() {
   const [history, setHistory] = useStoredState(HISTORY_KEY, []);
   const initialRoute = useRef(parseRoute(location.hash)).current;
   const [view, setView] = useState(initialRoute.view); // "split" | "settings" | "history"
+  const [settingsFocus, setSettingsFocus] = useState(null); // section id to scroll to when Settings opens
   const [openEntryId, setOpenEntryId] = useState(initialRoute.openEntryId ?? null);
   const [billMode, setBillMode] = useState( // null | "upload" | "manual"
     initialRoute.billMode !== undefined ? initialRoute.billMode : (bill ? "manual" : null)
@@ -1517,6 +1459,8 @@ export default function BillSplitter() {
         {view === "settings" && (
           <div style={{ padding: "16px 24px 24px" }}>
             <SettingsPage
+              focus={settingsFocus}
+              onFocused={() => setSettingsFocus(null)}
               onClose={() => goBack(() => setView("split"))}
               onKeyChanged={() => setKeyVersion(v => v + 1)}
               onClearSplit={resetSplit}
@@ -1541,7 +1485,8 @@ export default function BillSplitter() {
             mode={billMode} setMode={setBillMode} onBack={() => goBack(() => setBillMode(null))}
             onDone={parsed => { setBill(parsed); setStep(1); }} />}
           {step >= 1 && <TopBar onBack={() => goBack(() => { if (step === 1) setBillMode("manual"); setStep(step - 1); })} onReset={resetSplit} hasData />}
-          {step === 1 && <PeopleStep people={people} setPeople={setPeople} bill={bill} savedNames={savedNames} setSavedNames={setSavedNames} />}
+          {step === 1 && <PeopleStep people={people} setPeople={setPeople} bill={bill} savedNames={savedNames} setSavedNames={setSavedNames}
+            onManageSaved={() => { setSettingsFocus("saved-people"); setView("settings"); }} />}
           {step === 2 && <AssignStep bill={bill} people={people} assignments={assignments} setAssignments={setAssignments} />}
           {step === 3 && <SummaryStep
             bill={bill} people={people} assignments={assignments} payment={payment}
