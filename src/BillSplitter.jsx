@@ -43,7 +43,6 @@ const ReceiptIcon = (p) => <Glyph {...p}><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0
 const PencilIcon = (p) => <Glyph {...p}><path d="M4 20h4L18.5 9.5a2.8 2.8 0 0 0-4-4L4 16v4" /><path d="m13.5 6.5 4 4" /></Glyph>;
 const CameraIcon = (p) => <Glyph {...p}><path d="M5 7h1a2 2 0 0 0 2-2 1 1 0 0 1 1-1h6a1 1 0 0 1 1 1 2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2" /><circle cx="12" cy="13" r="3" /></Glyph>;
 const PhotoIcon = (p) => <Glyph {...p}><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="m21 15-5-5L5 20" /></Glyph>;
-const PlateIcon = (p) => <Glyph {...p}><path d="M4 3v6a3 3 0 0 0 3 3v9M7 3v5M10 3v6a3 3 0 0 1-3 3" /><path d="M19 15V3a5 5 0 0 0-4 5v4c0 1.1.9 2 2 2h2v7" /></Glyph>;
 const LockIcon = (p) => <Glyph {...p}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 1 1 8 0v4" /></Glyph>;
 
 // Share (three connected dots) and QR code glyphs for the summary buttons
@@ -1063,10 +1062,10 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames, onMana
   return (
     <div>
       <div style={{ background: "var(--accent-soft)", borderRadius: 12, padding: "14px 16px", marginBottom: 20, display: "flex", gap: 12, alignItems: "center" }}>
-        <div style={{ color: "var(--accent)" }}><PlateIcon size={24} /></div>
+        <div style={{ color: "var(--accent)" }}><ReceiptIcon size={24} /></div>
         <div>
           <div style={{ fontWeight: 700, color: "var(--text)" }}>{bill.restaurant}</div>
-          <div style={{ fontSize: 13, color: "var(--muted)" }}>{bill.currency}{bill.total?.toFixed(2)} total · {bill.items?.length} items</div>
+          <div style={{ fontSize: 13, color: "var(--muted)" }}>{bill.currency}{bill.total?.toFixed(2)} total · {bill.items?.length} {bill.items?.length === 1 ? "item" : "items"}</div>
         </div>
       </div>
       <div style={{ fontWeight: 700, marginBottom: 12, color: "var(--text)" }}>Who's splitting this bill?</div>
