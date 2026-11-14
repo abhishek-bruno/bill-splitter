@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
           start_url: "./",
           scope: "./",
           // Lets the browser tab ask (getInstalledRelatedApps) whether this app is already installed
-          related_applications: [{ platform: "webapp", url: new URL("manifest.webmanifest", VITE_PUBLIC_URL).href }],
+          ...(VITE_PUBLIC_URL && { related_applications: [{ platform: "webapp", url: new URL("manifest.webmanifest", VITE_PUBLIC_URL).href }] }),
           icons: [
             { src: "pwa-64x64.png", sizes: "64x64", type: "image/png" },
             { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },

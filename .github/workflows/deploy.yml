@@ -25,6 +25,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Repo Settings > Secrets and variables > Actions > Variables. If unset, links use the site's own URL.
+          VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
