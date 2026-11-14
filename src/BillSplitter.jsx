@@ -77,9 +77,10 @@ function Avatar({ name, color, size = 32 }) {
   );
 }
 
-// Earlier steps are buttons that jump back; the current and later ones are plain labels
+// Earlier steps are buttons that jump back; the current and later ones are plain labels.
+// Three steps of work; Settle is the result screen, where the bar is hidden
 function StepBar({ current, onJump }) {
-  const labels = ["Bill", "People", "Split", "Settle"];
+  const labels = ["Bill", "People", "Split"];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
       {labels.map((l, i) => {
@@ -117,6 +118,8 @@ const inputStyle = {
 const labelStyle = { fontSize: 12, fontWeight: 600, color: "var(--muted)", marginBottom: 4, display: "block" };
 
 // ── Step 1: Bill Entry ────────────────────────────────────────────────────────
+// Example names for empty item rows, one per row, in keeping with the "e.g. Barbeque Nation" bill name
+const ITEM_EXAMPLES = ["e.g. Non-veg buffet", "e.g. Veg buffet", "e.g. Mocktail", "e.g. Fresh lime soda", "e.g. Kulfi"];
 const blankItem = () => ({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: "", amount: "" });
 const toRows = (list, fallbackId) => list?.length
   ? list.map(x => ({ ...x, amount: String(x.amount) }))
@@ -1066,11 +1069,11 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       {showPhoto && lastFile && <PhotoSheet file={lastFile} onClose={() => setShowPhoto(false)} />}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginBottom: 16 }}>
         <div style={{ flex: 2 }}>
-          <label style={{ display: "block", fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Restaurant / Place</label>
+          <label style={{ display: "block", fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Bill name</label>
           <div style={{ position: "relative" }}>
-            <input value={restaurant} onChange={e => setRestaurant(e.target.value)} placeholder="e.g. Pizza Hut" style={{ ...inputStyle, paddingRight: restaurant ? 34 : 12 }} />
+            <input value={restaurant} onChange={e => setRestaurant(e.target.value)} placeholder="e.g. Barbeque Nation" style={{ ...inputStyle, paddingRight: restaurant ? 34 : 12 }} />
             {restaurant && (
-              <button onClick={() => setRestaurant("")} aria-label="Clear restaurant name" title="Clear" style={{
+              <button onClick={() => setRestaurant("")} aria-label="Clear bill name" title="Clear" style={{
                 position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 24, height: 24,
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
                 background: "none", border: "none", padding: 0, color: "var(--subtle)", cursor: "pointer"
@@ -1093,7 +1096,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           <div key={item.id} data-drag-row={item.id} onPointerDown={e => pressRow(e, "item", item.id)} style={{ display: "flex", gap: 8, alignItems: "center", WebkitTouchCallout: "none", ...dragRowStyle(item.id) }}>
             <input
               value={item.name} onChange={e => updateItem(item.id, "name", e.target.value)}
-              placeholder={`Item ${idx + 1} name`} data-row-name={item.id}
+              placeholder={ITEM_EXAMPLES[idx % ITEM_EXAMPLES.length]} data-row-name={item.id}
               style={{ ...inputStyle, flex: 1, minWidth: 0 }}
             />
             <div style={{ position: "relative", flex: "0 0 116px" }}>
@@ -2486,7 +2489,7 @@ export default function BillSplitter() {
               borderRadius: 10, padding: 12, fontWeight: 700,
               cursor: canNext() ? "pointer" : "default", fontSize: 15, transition: "all .2s", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
             }}>
-              {step === 2 ? "Settle up" : "Assign items"} <ArrowRightIcon size={16} />
+              {step === 2 ? "Settle up" : "Split items"} <ArrowRightIcon size={16} />
             </button>
             </div>
           </StickyFooter>
