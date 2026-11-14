@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey, isLocalProvider } from "./vision.js";
-import { ENGINES, isEngineReady, downloadEngine, removeEngine, labsOn } from "./local/models.js";
+import { ENGINES, isEngineReady, downloadEngine, removeEngine } from "./local/models.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
 import InstallBanner from "./InstallPrompt.jsx";
 import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy, upiRequest, copyText, sharesOf, isUneven, roundAdjust } from "./payment.js";
@@ -668,7 +668,7 @@ function LocalEngines({ config, onUse }) {
   return (
     <div>
       <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>Free, private, and works offline.</div>
-      {Object.entries(ENGINES).filter(([id, e]) => !e.labs || labsOn() || ready[id] || config?.provider === `local-${id}`).map(([id, e]) => {
+      {Object.entries(ENGINES).map(([id, e]) => {
         const inUse = config?.provider === `local-${id}`;
         const busy = progress?.id === id;
         return (

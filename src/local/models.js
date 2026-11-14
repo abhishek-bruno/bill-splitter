@@ -31,7 +31,6 @@ export const ENGINES = {
   plus: {
     label: "Plus",
     level: 2,
-    labs: true, // being tested: shown only on devices that opened the app with ?labs=1 (or already have it)
     sizeMB: 180,
     blurb: "Sharper text reading for small or faint print.",
     source: "PaddlePaddle's model server and the jsDelivr CDN",
@@ -41,11 +40,6 @@ export const ENGINES = {
 };
 
 const markKey = (id) => `spliteasy:engine:${id}`;
-
-// Engines still being tested are offered only on devices that opted in by opening the app with ?labs=1
-const LABS_KEY = "spliteasy:labs";
-try { if (new URLSearchParams(location.search).get("labs") === "1") localStorage.setItem(LABS_KEY, "1"); } catch { /* storage unavailable */ }
-export const labsOn = () => { try { return localStorage.getItem(LABS_KEY) === "1"; } catch { return false; } };
 
 // Ready = the user finished a download and every file is still cached (browsers can evict storage)
 export async function isEngineReady(id) {
