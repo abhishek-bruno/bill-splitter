@@ -43,7 +43,7 @@ button, input, select { font: inherit; }
 /* 16px inputs stop iOS Safari from zooming on focus */
 input, select { font-size: 16px !important; }
 input::placeholder { color: var(--subtle); }
-button { -webkit-tap-highlight-color: transparent; }
+html, button { -webkit-tap-highlight-color: transparent; } /* no grey flash when tapping cards or buttons */
 /* keep focused fields clear of the sticky header and bottom button when scrolled into view */
 html { scroll-padding-top: 150px; scroll-padding-bottom: 96px; }
 
