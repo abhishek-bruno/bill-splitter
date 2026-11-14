@@ -166,7 +166,7 @@ const ResetButton = ({ onReset, hasData }) => (
 
 // Home page selling points; icons are 24x24 stroke paths
 const FEATURES = [
-  { title: "Fully local, no account", text: "Nothing to sign up for. Your data stays on your phone.",
+  { title: "Fully local, no account", text: "No sign-up. Your data stays on your phone.",
     icon: <><path d="M2 2l20 20" /><path d="M5.8 5.8A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.3-.2" /><path d="M21.5 16.5A4.5 4.5 0 0 0 17.5 10h-1.8A7 7 0 0 0 10 5.1" /></> },
   { title: "Enter the bill, get the split", text: "Items split by who had them, taxes shared equally.",
     icon: <><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" /><path d="M9 7h6M9 11h6M9 15h3" /></> },
