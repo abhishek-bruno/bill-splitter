@@ -338,7 +338,7 @@ function ApiKeySettings({ config, savedKeys = {}, onSave, onCancel, heading = tr
   return (
     <div>
       {heading && <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)", marginBottom: 4 }}>Connect a vision API</div>}
-      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>Use your own key to read bill photos.</div>
+      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>More accurate, needs internet.</div>
 
       <label style={labelStyle}>Provider</label>
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
