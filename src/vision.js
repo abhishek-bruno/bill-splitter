@@ -94,48 +94,70 @@ async function httpError(res, provider) {
   } catch { /* non-JSON body */ }
   if (res.status === 401 || res.status === 403 || reason === "API_KEY_INVALID") return new Error(`${PROVIDERS[provider].label} rejected the API key. Check it in settings.`);
   if (res.status === 429) return new Error(`${PROVIDERS[provider].label} rate limit or quota reached. Try again later.`);
-  return new Error(msg || `${PROVIDERS[provider].label} request failed (${res.status}).`);
+  const error = new Error(msg || `${PROVIDERS[provider].label} request failed (${res.status}).`);
+  error.overloaded = isOverloaded(res);
+  return error;
 }
+
+// 500/502/503/504: provider is temporarily overloaded ("experiencing high demand"); worth retrying.
+const isOverloaded = (res) => [500, 502, 503, 504].includes(res.status);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+const REQUEST_TIMEOUT_MS = 30000;
+
+// One attempt, capped at REQUEST_TIMEOUT_MS. A timeout is treated like an overload (try the next model).
+async function fetchWithTimeout(url, options) {
+  try {
+    return await fetch(url, { ...options, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch (e) {
+    if (e.name !== "TimeoutError") throw e;
+    const error = new Error("The request timed out.");
+    error.overloaded = true;
+    throw error;
+  }
+}
+
+// Retry overloaded responses once after ~1s. Kept short so a busy provider fails fast.
+async function fetchWithRetry(url, options, tries = 2) {
+  for (let i = 0; ; i++) {
+    const res = await fetchWithTimeout(url, options);
+    if (!isOverloaded(res) || i === tries - 1) return res;
+    await sleep(1000 + Math.random() * 500);
+  }
+}
+
+// Tried in order when the chosen Gemini model is overloaded or too slow.
+const GOOGLE_FALLBACK_MODELS = ["gemini-flash-lite-latest"];
 
 // Gemini's schema support is a subset of JSON Schema; drop the fields it may reject
 const geminiSchema = (schema) => JSON.parse(JSON.stringify(schema, (k, v) => k === "additionalProperties" ? undefined : v));
 
-// Interactions API: https://ai.google.dev/gemini-api/docs/interactions-overview
 async function callGoogle(config, img) {
-  const { apiKey, model } = config;
-  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      model,
-      input: [
-        { type: "text", text: PROMPT },
-        { type: "image", data: img.base64, mime_type: img.mediaType }
-      ],
-      response_format: { type: "text", mime_type: "application/json", schema: geminiSchema(SCHEMA) }
-    })
-  });
-  // Older models or regions without the Interactions API: fall back to generateContent
-  if (res.status === 404) return callGoogleGenerateContent(config, img);
-  if (!res.ok) throw await httpError(res, "google");
-  const data = await res.json();
-  const it = data.interaction ?? data;
-  return it.output_text ?? it.outputText
-    ?? (it.outputs || []).filter(o => o.type === "text").map(o => o.text).join("");
+  const models = [config.model, ...GOOGLE_FALLBACK_MODELS.filter(m => m !== config.model)];
+  for (let i = 0; ; i++) {
+    try {
+      return await callGoogleModel({ ...config, model: models[i] }, img);
+    } catch (e) {
+      if (!e.overloaded) throw e;
+      if (i === models.length - 1) throw new Error("Google Gemini is overloaded right now. Try again in a minute, or switch provider in settings.");
+    }
+  }
 }
 
-async function callGoogleGenerateContent({ apiKey, model }, img) {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+// generateContent: https://ai.google.dev/api/generate-content
+async function callGoogleModel({ apiKey, model }, img) {
+  const res = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
       contents: [{ parts: [{ inline_data: { mime_type: img.mediaType, data: img.base64 } }, { text: PROMPT }] }],
-      generationConfig: { responseMimeType: "application/json" }
+      generationConfig: { responseMimeType: "application/json", responseSchema: geminiSchema(SCHEMA) }
     })
   });
   if (!res.ok) throw await httpError(res, "google");
   const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
+  // Skip thought-summary parts; only the answer parts hold the JSON
+  return data.candidates?.[0]?.content?.parts?.filter(p => !p.thought).map(p => p.text || "").join("") || "";
 }
 
 async function callOpenAI({ apiKey, model }, img) {
@@ -219,9 +241,15 @@ export async function parseBillImage(file, config) {
   const text = await CALLERS[config.provider]({ ...upgradeModel(config), apiKey }, img);
   let raw;
   try {
-    raw = JSON.parse(text.replace(/```json|```/g, "").trim());
+    const cleaned = text.replace(/```json|```/g, "").trim();
+    // Tolerate stray text around the JSON object
+    const start = cleaned.indexOf("{"), end = cleaned.lastIndexOf("}");
+    raw = JSON.parse(start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned);
   } catch {
-    throw new Error("Couldn't understand the model's response. Try a clearer photo or enter manually.");
+    console.warn("Unparseable bill scan response:", text);
+    throw new Error(text.trim()
+      ? "Couldn't understand the model's response. Try a clearer photo or enter manually."
+      : "The model returned an empty response. Try again or enter manually.");
   }
   const bill = normalize(raw);
   if (bill.items.length === 0) throw new Error("No items found on the bill. Try a clearer photo or enter manually.");
