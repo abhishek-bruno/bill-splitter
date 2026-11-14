@@ -266,7 +266,7 @@ async function scanOnDevice(file, provider) {
     taxes: [...r.taxes, ...(r.discount > 0 ? [{ name: "Discount", amount: -r.discount }] : [])]
   });
   bill.roundOff = Math.abs(r.round) > 0.001;
-  if (bill.items.length === 0) throw new Error("Couldn't find items on this bill. Try a clearer, straight photo or enter manually.");
+  if (bill.items.length === 0) throw new Error("Couldn't find items on this bill. Try a clearer, straight photo, or type it in.");
   bill.scanCheck = r.check; // printed vs computed total, shown on the review screen
   return bill;
 }
@@ -287,10 +287,10 @@ export async function parseBillImage(file, config) {
   } catch {
     console.warn("Unparseable bill scan response:", text);
     throw new Error(text.trim()
-      ? "Couldn't understand the model's response. Try a clearer photo or enter manually."
-      : "The model returned an empty response. Try again or enter manually.");
+      ? "Couldn't understand the model's response. Try a clearer photo, or type it in."
+      : "The model returned an empty response. Try again, or type it in.");
   }
   const bill = normalize(raw);
-  if (bill.items.length === 0) throw new Error("No items found on the bill. Try a clearer photo or enter manually.");
+  if (bill.items.length === 0) throw new Error("No items found on the bill. Try a clearer photo, or type it in.");
   return bill;
 }

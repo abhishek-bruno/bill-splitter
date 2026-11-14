@@ -45,11 +45,6 @@ const CameraIcon = (p) => <Glyph {...p}><path d="M5 7h1a2 2 0 0 0 2-2 1 1 0 0 1 
 const PhotoIcon = (p) => <Glyph {...p}><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="m21 15-5-5L5 20" /></Glyph>;
 const PlateIcon = (p) => <Glyph {...p}><path d="M4 3v6a3 3 0 0 0 3 3v9M7 3v5M10 3v6a3 3 0 0 1-3 3" /><path d="M19 15V3a5 5 0 0 0-4 5v4c0 1.1.9 2 2 2h2v7" /></Glyph>;
 const LockIcon = (p) => <Glyph {...p}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 1 1 8 0v4" /></Glyph>;
-// Tinted square holding an icon, like the home page feature list
-const IconTile = ({ children, active }) => (
-  <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center",
-    background: active ? "var(--surface)" : "var(--accent-soft)", color: "var(--accent)" }}>{children}</span>
-);
 
 // Share (three connected dots) and QR code glyphs for the summary buttons
 function ShareIcon({ size = 15 }) {
@@ -416,9 +411,14 @@ function PhotoSheet({ file, onClose }) {
     </Sheet>
   );
 }
-// Scan result banner: message on the left, actions on the right
-const scanBanner = { display: "flex", alignItems: "center", gap: 12, fontSize: 13, borderRadius: 8, padding: "8px 14px", marginBottom: 16 };
-const photoLinkBtn = { background: "none", border: "none", padding: 0, color: "inherit", fontWeight: 700, fontSize: 13, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2, fontFamily: "inherit" };
+// Home footer buttons: primary (accent) or outlined, icon + label, thumb-sized
+const homeBtn = (primary) => ({
+  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", borderRadius: 12, padding: "14px 12px",
+  fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+  border: primary ? "none" : "1.5px solid var(--border)", background: primary ? "var(--accent)" : "var(--surface)", color: primary ? "#fff" : "var(--text-2)"
+});
+// Small outlined buttons on the scanned bill card
+const cardBtn = { display: "inline-flex", alignItems: "center", gap: 5, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" };
 
 // How bills are read, as a bottom sheet (scan flow and Settings): on this device, or a cloud AI with your key
 function ApiKeySheet({ config, onSave, onClose, onRemove }) {
@@ -577,14 +577,12 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
 
   // Photo scanning
   const [apiConfig, setApiConfig] = useState(undefined); // undefined = loading, null = not set
-  // Key form sheet: null (closed), "scan" (opened from Scan bill photo: go on to the scanner after saving)
-  // or "change" (opened from the scanner's Change link)
+  // Reader setup sheet: null (closed) or open; after setup the home footer offers Scan bill / Gallery
   const [keySheet, setKeySheet] = useState(null);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [scanned, setScanned] = useState(false);
   const [scanCheck, setScanCheck] = useState(null); // on-device reader: printed vs computed total
-  const [dragging, setDragging] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const cameraRef = useRef();
   const galleryRef = useRef();
@@ -605,7 +603,6 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const saveConfig = async (cfg) => {
     await saveSecret("vision", cfg);
     setApiConfig(cfg);
-    if (keySheet === "scan") setMode("upload");
     setKeySheet(null);
     setError("");
   };
@@ -618,19 +615,24 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
 
   const [lastFile, setLastFile] = useState(null); // kept so a failed scan can be retried without retaking the photo
 
+  // A photo from the camera or gallery goes straight to the reading screen
+  const scanRun = useRef(0); // bumping it makes an in-flight scan's result be ignored (Cancel)
   const handleFile = (file) => {
     if (!file) return;
-    if (!file.type?.startsWith("image/")) { setError("Please choose an image file."); setLastFile(null); return; }
+    if (!file.type?.startsWith("image/")) { setError("Please choose an image file."); return; }
     setPreview(URL.createObjectURL(file));
     setLastFile(file);
+    setMode("upload");
     scanFile(file);
   };
 
   const scanFile = async (file) => {
+    const run = ++scanRun.current;
     setError("");
     setLoading(true);
     try {
       const bill = await parseBillImage(file, apiConfig);
+      if (run !== scanRun.current) return; // cancelled
       setRestaurant(bill.restaurant);
       if (bill.currency) setCurrency(bill.currency);
       setItems(toRows(bill.items, "1"));
@@ -640,11 +642,13 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       setScanned(true);
       setMode("manual");
     } catch (e) {
-      setError(e.message || "Could not read the bill.");
+      if (run === scanRun.current) setError(e.message || "Could not read the bill.");
     } finally {
-      setLoading(false);
+      if (run === scanRun.current) setLoading(false);
     }
   };
+  const cancelScan = () => { scanRun.current++; setLoading(false); setError(""); goLandingRef.current?.(); };
+  const goLandingRef = useRef(null);
 
   // Focus the name field of a newly added row once it has rendered
   const [focusRowId, setFocusRowId] = useState(null);
@@ -687,31 +691,33 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const formHasData = !!restaurant.trim() || [...items, ...taxes].some(x => x.name.trim() || String(x.amount).trim());
   // Mode changes can come from the browser back button, so reset per-screen state here
   useEffect(() => {
-    setError(""); setKeySheet(null);
-    if (!mode) setPreview(null); // kept while reviewing a scan, so Back shows the same photo
+    if (mode !== "upload") setError("");
+    setKeySheet(null);
   }, [mode]);
 
   const goLanding = onBack;
-  const topBar = <TopBar onBack={goLanding} onReset={onReset} hasData={formHasData} />;
+  goLandingRef.current = goLanding;
 
   const keySheetEl = keySheet && (
     <ApiKeySheet config={apiConfig} onSave={saveConfig} onClose={() => setKeySheet(null)} onRemove={removeConfig} />
   );
 
-  // Reaching the scanner without a key (e.g. a reload on #/bill/scan): back to the start, with the key form open
+  // The reading screen only makes sense with a photo (a reload on #/bill/scan has none): back to the start
   useEffect(() => {
-    if (mode === "upload" && apiConfig === null) { setMode(null); setKeySheet("scan"); }
-  }, [mode, apiConfig]);
+    if (mode === "upload" && !lastFile) setMode(null);
+  }, [mode, lastFile]);
+
+  // One pair of hidden pickers, reachable from every screen (Scan bill, Gallery, Retake)
+  const fileInputs = (
+    <>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { handleFile(e.target.files[0]); e.target.value = ""; }} />
+      <input ref={galleryRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { handleFile(e.target.files[0]); e.target.value = ""; }} />
+    </>
+  );
 
   // Landing: pick mode
   const localReader = isLocalProvider(apiConfig?.provider);
   const canScan = online || localReader; // the on-device reader works offline
-  const scanDefault = !!apiConfig && canScan;
-  const optionStyle = (primary) => ({
-    display: "flex", alignItems: "center", gap: 14, borderRadius: 14, padding: "13px 16px",
-    cursor: "pointer", textAlign: "left", width: "100%",
-    border: `1.5px solid ${primary ? "var(--accent)" : "var(--border)"}`, background: primary ? "var(--accent-soft)" : "var(--surface)"
-  });
 
   if (!mode) return (
     <div className="fill">
@@ -737,28 +743,28 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       </div>
       </div>
       <StickyFooter bleed>
+        {/* Row 1: scan (camera / gallery) or, before setup, one setup button. Row 2: enter manually */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <button onClick={() => { setError(""); if (apiConfig === null) setKeySheet("scan"); else setMode("upload"); }} style={optionStyle(scanDefault)}>
-            <IconTile active={scanDefault}><ReceiptIcon size={20} /></IconTile>
-            <span>
-              <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: scanDefault ? "var(--accent)" : "var(--text)" }}>Scan bill photo</span>
-              <span style={{ display: "block", fontSize: 12, color: scanDefault ? "var(--accent-muted)" : "var(--subtle)", marginTop: 2 }}>
-                {localReader ? "On Device AI reads the bill, works offline"
-                  : !online ? "Needs internet. You're offline right now."
-                  : apiConfig ? `AI reads the items using ${PROVIDERS[apiConfig.provider].label}`
-                  : "Reads items with On Device AI or your own AI key"}
-              </span>
-            </span>
-          </button>
-          <button onClick={() => setMode("manual")} style={optionStyle(!scanDefault)}>
-            <IconTile active={!scanDefault}><PencilIcon size={20} /></IconTile>
-            <span>
-              <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: scanDefault ? "var(--text)" : "var(--accent)" }}>Enter manually</span>
-              <span style={{ display: "block", fontSize: 12, color: scanDefault ? "var(--subtle)" : "var(--accent-muted)", marginTop: 2 }}>Type in items and charges yourself.</span>
-            </span>
-          </button>
+          {apiConfig ? (
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => cameraRef.current.click()} disabled={!canScan} style={{ ...homeBtn(true), flex: 3, opacity: canScan ? 1 : 0.5 }}><CameraIcon size={20} /> Scan bill</button>
+              <button onClick={() => galleryRef.current.click()} disabled={!canScan} style={{ ...homeBtn(false), flex: 2, opacity: canScan ? 1 : 0.5 }}><PhotoIcon size={20} /> Gallery</button>
+            </div>
+          ) : apiConfig === null ? (
+            <button onClick={() => setKeySheet("setup")} style={homeBtn(true)}><ReceiptIcon size={20} /> Set up bill scanning</button>
+          ) : null}
+          <button onClick={() => setMode("manual")} style={homeBtn(false)}><PencilIcon size={20} /> Enter manually</button>
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, fontSize: 12, color: "var(--subtle)", minHeight: 18 }}>
+            {apiConfig ? (
+              <>
+                {!canScan ? "You're offline. This reader needs internet." : <>Scanning with {readerLabel(apiConfig)}</>} ·
+                <button onClick={() => setKeySheet("change")} style={{ ...linkBtn, fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>Change</button>
+              </>
+            ) : apiConfig === null ? "Free On Device AI, or your own AI key" : null}
+          </div>
         </div>
       </StickyFooter>
+      {fileInputs}
       {keySheetEl}
     </div>
   );
@@ -766,122 +772,82 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   // Upload mode
   // Scan result banner (review form and, after Back, the scanner): message left, actions right
   const scanSum = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0) + taxes.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
-  const scanBannerFor = (actions) => {
-    if (!scanned) return null;
-    const warn = scanCheck && !scanCheck.matches;
-    return (
-      <div style={{ ...scanBanner, ...(warn
-        ? { color: "var(--warn-text)", background: "var(--warn-soft)", border: "1px solid var(--warn-border)" }
-        : { color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)" }) }}>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          {warn ? `Adds up to ${currency}${scanSum.toFixed(2)}, bill says ${currency}${scanCheck.printedTotal.toFixed(2)}.`
-            : <><CheckIcon size={13} /> {scanCheck?.matches ? "Matches the bill total." : "Scanned. Check against the bill."}</>}
-        </span>
-        <span style={{ display: "inline-flex", gap: 14, flexShrink: 0 }}>{actions}</span>
-      </div>
-    );
-  };
 
+  // Reading screen: the photo being read; Cancel goes home. A failed read offers ways on from the footer.
   if (mode === "upload") {
-    if (!apiConfig) return <div>{topBar}</div>; // loading, or about to bounce back without a key
     return (
       <div className="fill">
-        {/* After a scan the footer has reset / back / next, so the top row would repeat them */}
-        {!scanned && topBar}
-        {keySheetEl}
-        {/* Back from the scanned form: same photo, its scan result, and a way back to the items */}
-        {scanBannerFor(<button onClick={() => setMode("manual")} style={photoLinkBtn}>Edit items</button>)}
-        {!canScan && (
-          <div style={{ fontSize: 13, color: "var(--warn-text)", background: "var(--warn-soft)", border: "1px solid var(--warn-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 12 }}>
-            You're offline. Scanning needs internet.
-          </div>
-        )}
-        <div
-          onDragOver={e => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={e => { e.preventDefault(); setDragging(false); !loading && handleFile(e.dataTransfer.files[0]); }}
-          style={{
-            border: `2px dashed ${dragging ? "var(--accent)" : "var(--border-strong)"}`,
-            borderRadius: 16, padding: "28px 20px", textAlign: "center",
-            background: dragging ? "var(--accent-soft)" : "var(--surface-2)", transition: "all .2s", minHeight: 180,
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12
-          }}
-        >
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => { handleFile(e.target.files[0]); e.target.value = ""; }} />
-          <input ref={galleryRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { handleFile(e.target.files[0]); e.target.value = ""; }} />
-          {preview && <img src={preview} alt="bill" style={{ maxHeight: 200, maxWidth: "100%", borderRadius: 8, objectFit: "contain", opacity: loading ? 0.5 : 1 }} />}
+        {fileInputs}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: "8px 0 16px" }}>
+          {preview && (
+            <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", maxWidth: "100%", boxShadow: "0 4px 20px #0002" }}>
+              <img src={preview} alt="Bill" style={{ display: "block", maxHeight: "52vh", maxWidth: "100%", objectFit: "contain", opacity: loading ? 0.85 : 1 }} />
+              {loading && <div className="scan-line" />}
+            </div>
+          )}
           {loading ? (
-            <>
-              <div style={{ color: "var(--accent)", fontWeight: 600 }}>Reading your bill…</div>
-              <div style={{ display: "flex", gap: 4 }}>
-                {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: `bounce .8s ${i*0.15}s infinite alternate` }} />)}
-              </div>
-            </>
-          ) : (
-            <>
-              {!preview && <div style={{ color: "var(--accent)" }}><ReceiptIcon size={40} /></div>}
-              {!preview && <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Add a photo of the bill</div>}
-              <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 320 }}>
-                <button onClick={() => cameraRef.current.click()} disabled={!canScan} style={{
-                  flex: 1, border: "none", borderRadius: 10, padding: "11px 8px", fontWeight: 700, fontSize: 14,
-                  background: canScan ? "var(--accent)" : "var(--border)", color: canScan ? "#fff" : "var(--subtle)", cursor: canScan ? "pointer" : "default",
-                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
-                }}><CameraIcon size={17} /> {preview ? "Retake" : "Camera"}</button>
-                <button onClick={() => galleryRef.current.click()} disabled={!canScan} style={{
-                  flex: 1, border: "1.5px solid var(--border)", borderRadius: 10, padding: "11px 8px", fontWeight: 600, fontSize: 14,
-                  background: "var(--surface)", color: canScan ? "var(--text-2)" : "var(--subtle)", cursor: canScan ? "pointer" : "default",
-                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
-                }}><PhotoIcon size={17} /> Gallery</button>
-              </div>
-            </>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontWeight: 700, color: "var(--text)" }}>Reading bill…</div>
+              <div style={{ fontSize: 12, color: "var(--subtle)", marginTop: 2 }}>{readerLabel(apiConfig)}</div>
+            </div>
+          ) : error && (
+            <div style={{ fontSize: 14, color: "var(--danger)", background: "var(--danger-soft)", borderRadius: 10, padding: "10px 14px", textAlign: "center", maxWidth: 360 }}>{error}</div>
           )}
         </div>
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, marginTop: 12, fontSize: 13, color: "var(--subtle)" }}>
-          Using {readerLabel(apiConfig)} ·
-          <button onClick={() => setKeySheet("change")} disabled={loading} style={{ ...linkBtn, color: "var(--accent)", fontWeight: 600 }}>Change</button>
-        </div>
-        {error && (
-          <div style={{ marginTop: 12, color: "var(--danger)", fontSize: 13, background: "var(--danger-soft)", borderRadius: 8, padding: "10px 14px" }}>
-            <div>{error}</div>
-            <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-              {lastFile && (
-                <button onClick={() => scanFile(lastFile)} disabled={!canScan} style={{ color: canScan ? "var(--accent)" : "var(--subtle)", background: "none", border: "none", cursor: canScan ? "pointer" : "default", fontWeight: 700, fontSize: 13, padding: 0 }}>↻ Retry</button>
-              )}
-              <button onClick={() => { setMode("manual"); setError(""); }} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13, padding: 0 }}>Enter manually <ArrowRightIcon size={13} /></button>
+        <style>{`.scan-line { position: absolute; left: 0; right: 0; height: 3px; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: scanmove 1.6s ease-in-out infinite alternate; }
+          @keyframes scanmove { from { top: 4%; } to { top: 94%; } }`}</style>
+        <StickyFooter bleed>
+          {loading ? (
+            <button onClick={cancelScan} style={{ ...footerBackBtn, width: "100%" }}>Cancel</button>
+          ) : (
+            // Couldn't read it: try the same photo again, take or pick another, or type it in
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                {lastFile && <button onClick={() => scanFile(lastFile)} disabled={!canScan} style={{ ...homeBtn(true), flex: 1 }}>Try again</button>}
+                <button onClick={() => cameraRef.current.click()} style={{ ...homeBtn(false), flex: 1 }}><CameraIcon size={18} /> Retake</button>
+                <button onClick={() => galleryRef.current.click()} style={{ ...homeBtn(false), flex: 1 }}><PhotoIcon size={18} /> Gallery</button>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={goLanding} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
+                <button onClick={() => { setError(""); setMode("manual"); }} style={{ ...footerBackBtn, flex: 1 }}><PencilIcon size={16} /> Type it in</button>
+              </div>
             </div>
-          </div>
-        )}
-        <style>{`@keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-6px); } }`}</style>
-        {scanned && (
-          // A scanned bill can go straight on to step 2 from here
-          <StickyFooter bleed>
-            <div style={{ display: "flex", gap: 8 }}>
-              <FooterReset onReset={onReset} needsConfirm={formHasData} />
-              <button onClick={goLanding} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
-              <button onClick={submitManual} disabled={loading} style={{
-                flex: 2, border: "none", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-                background: "var(--accent)", color: "#fff", borderRadius: 10, padding: 13, fontWeight: 700, cursor: "pointer", fontSize: 15
-              }}>Add people <ArrowRightIcon size={16} /></button>
-            </div>
-          </StickyFooter>
-        )}
+          )}
+        </StickyFooter>
       </div>
     );
   }
 
-  // Scan banner actions: compare with the bill photo, or go back and take a new one
-  const scanActions = (
-    <>
-      {lastFile && <button onClick={() => setShowPhoto(true)} style={photoLinkBtn}>View bill</button>}
-      <button onClick={() => { setError(""); setMode("upload"); }} style={photoLinkBtn}>Rescan</button>
-    </>
-  );
+  // Scanned bill card: photo thumbnail, whether it adds up, and Retake / View
+  const billCard = scanned && (() => {
+    const warn = scanCheck && !scanCheck.matches;
+    return (
+      <div style={{ display: "flex", gap: 12, alignItems: "center", border: `1px solid ${warn ? "var(--warn-border)" : "var(--border)"}`, background: warn ? "var(--warn-soft)" : "var(--surface-2)", borderRadius: 14, padding: 10, marginBottom: 16 }}>
+        {preview && (
+          <button onClick={() => setShowPhoto(true)} aria-label="View bill photo" style={{ flexShrink: 0, padding: 0, border: "none", background: "none", cursor: "pointer", borderRadius: 8, overflow: "hidden", width: 52, height: 64 }}>
+            <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          </button>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: warn ? "var(--warn-text)" : "var(--success-text)" }}>
+            {warn ? `Adds up to ${currency}${scanSum.toFixed(2)}, bill says ${currency}${scanCheck.printedTotal.toFixed(2)}`
+              : <><CheckIcon size={12} /> {scanCheck?.matches ? `Matches the bill total` : "Scanned. Check against the bill"}</>}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button onClick={() => cameraRef.current.click()} style={cardBtn}><CameraIcon size={15} /> Retake</button>
+            {lastFile && <button onClick={() => setShowPhoto(true)} style={cardBtn}><PhotoIcon size={15} /> View</button>}
+          </div>
+        </div>
+      </div>
+    );
+  })();
 
   // Manual mode (also used to review scanned results)
   const manualValid = items.some(i => i.name.trim() && parseFloat(i.amount) > 0);
   return (
     <div className="fill">
-      {scanBannerFor(scanActions)}
+      {fileInputs}
+      {billCard}
       {showPhoto && lastFile && <PhotoSheet file={lastFile} onClose={() => setShowPhoto(false)} />}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginBottom: 16 }}>
         <div style={{ flex: 2 }}>
@@ -993,7 +959,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       <StickyFooter bleed>
         <div style={{ display: "flex", gap: 8 }}>
         <FooterReset onReset={onReset} needsConfirm={formHasData} />
-        <button onClick={scanned ? () => setMode("upload") : goLanding} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
+        <button onClick={goLanding} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
         <button onClick={submitManual} disabled={!manualValid} style={{
           flex: 2, border: "none", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
           background: manualValid ? "var(--accent)" : "var(--border)",
