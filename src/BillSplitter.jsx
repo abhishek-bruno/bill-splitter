@@ -277,6 +277,25 @@ const linkBtn = {
 };
 
 // Loads the saved vision config, replacing a retired model with its successor and saving that back
+// Saved cloud keys, one per provider ({ google: { apiKey, model }, ... }), kept apart from the active choice
+// so switching readers (or providers) never loses a key. Includes the active cloud key from older saves.
+async function loadVisionKeys(active) {
+  const keys = (await loadSecret("visionKeys").catch(() => null)) || {};
+  if (active?.apiKey && PROVIDERS[active.provider] && !keys[active.provider]) keys[active.provider] = { apiKey: active.apiKey, model: active.model };
+  return keys;
+}
+async function rememberCloudKey(cfg) {
+  if (!PROVIDERS[cfg?.provider] || !cfg.apiKey) return;
+  const keys = await loadVisionKeys(null);
+  keys[cfg.provider] = { apiKey: cfg.apiKey, model: cfg.model };
+  await saveSecret("visionKeys", keys);
+}
+async function forgetCloudKey(provider) {
+  const keys = await loadVisionKeys(null);
+  delete keys[provider];
+  await saveSecret("visionKeys", keys);
+}
+
 async function loadVisionConfig() {
   const saved = await loadSecret("vision");
   if (!saved) return saved;
@@ -285,19 +304,22 @@ async function loadVisionConfig() {
   return upgraded;
 }
 
-function ApiKeySettings({ config, onSave, onCancel, heading = true, children }) {
-  const [provider, setProvider] = useState(config?.provider || "google");
-  const [apiKey, setApiKey] = useState(config?.apiKey || "");
-  const [model, setModel] = useState(config?.model || PROVIDERS[config?.provider || "google"].defaultModel);
+function ApiKeySettings({ config, savedKeys = {}, onSave, onCancel, heading = true, children }) {
+  // Start on the active cloud provider, else one with a saved key, else Gemini
+  const startId = config?.provider || Object.keys(savedKeys).find(id => PROVIDERS[id]) || "google";
+  const [provider, setProvider] = useState(startId);
+  const [apiKey, setApiKey] = useState(config?.apiKey || savedKeys[startId]?.apiKey || "");
+  const [model, setModel] = useState(config?.model || savedKeys[startId]?.model || PROVIDERS[startId].defaultModel);
   const [saving, setSaving] = useState(false);
   const p = PROVIDERS[provider];
   // A model not in the provider's list (typed earlier) opens straight in manual entry
   const [manualModel, setManualModel] = useState(() => !p.models.some(m => m.id === model));
 
+  // Each provider shows its own saved key, if any
   const pick = (id) => {
     setProvider(id);
-    setApiKey(id === config?.provider ? config.apiKey : "");
-    const next = id === config?.provider ? config.model : PROVIDERS[id].defaultModel;
+    setApiKey(savedKeys[id]?.apiKey || "");
+    const next = savedKeys[id]?.model || PROVIDERS[id].defaultModel;
     setModel(next);
     setManualModel(!PROVIDERS[id].models.some(m => m.id === next));
   };
@@ -389,16 +411,22 @@ function PhotoSheet({ file, onClose }) {
     return () => URL.revokeObjectURL(u);
   }, [file]);
   return (
-    <Sheet title="Bill photo" onClose={onClose}>
+    <Sheet title="Bill" onClose={onClose}>
       {url && <img src={url} alt="Scanned bill" style={{ width: "100%", borderRadius: 10, display: "block" }} />}
     </Sheet>
   );
 }
+// Scan result banner: message on the left, actions on the right
+const scanBanner = { display: "flex", alignItems: "center", gap: 12, fontSize: 13, borderRadius: 8, padding: "8px 14px", marginBottom: 16 };
 const photoLinkBtn = { background: "none", border: "none", padding: 0, color: "inherit", fontWeight: 700, fontSize: 13, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2, fontFamily: "inherit" };
 
 // How bills are read, as a bottom sheet (scan flow and Settings): on this device, or a cloud AI with your key
 function ApiKeySheet({ config, onSave, onClose, onRemove }) {
   const local = isLocalProvider(config?.provider);
+  const [savedKeys, setSavedKeys] = useState(null);
+  useEffect(() => { loadVisionKeys(config).then(setSavedKeys).catch(() => setSavedKeys({})); }, [config]);
+  // A cloud key is kept per provider on save; choosing On Device AI only changes the active reader
+  const save = async (cfg) => { await rememberCloudKey(cfg); onSave(cfg); };
   // New users start on the free on-device tab; people with a cloud key start on theirs
   const [tab, setTab] = useState(config && !local ? "cloud" : "device");
   return (
@@ -414,10 +442,10 @@ function ApiKeySheet({ config, onSave, onClose, onRemove }) {
       </div>
       {tab === "device" ? (
         <LocalEngines config={config} onUse={(id) => onSave({ provider: `local-${id}` })} onRemoved={(id) => { if (config?.provider === `local-${id}`) onRemove?.(); }} />
-      ) : (
-        <ApiKeySettings config={local ? null : config} onSave={onSave} onCancel={onClose} heading={false}>
+      ) : savedKeys && (
+        <ApiKeySettings config={local ? null : config} savedKeys={savedKeys} onSave={save} onCancel={onClose} heading={false}>
           {config && !local && onRemove && (
-            <button onClick={onRemove} style={{ ...linkBtn, color: "var(--danger)", margin: "0 auto 16px" }}>Remove saved key</button>
+            <button onClick={async () => { await forgetCloudKey(config.provider); onRemove(); }} style={{ ...linkBtn, color: "var(--danger)", margin: "0 auto 16px" }}>Remove saved key</button>
           )}
         </ApiKeySettings>
       )}
@@ -660,7 +688,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   // Mode changes can come from the browser back button, so reset per-screen state here
   useEffect(() => {
     setError(""); setKeySheet(null);
-    if (mode !== "upload") setPreview(null);
+    if (!mode) setPreview(null); // kept while reviewing a scan, so Back shows the same photo
   }, [mode]);
 
   const goLanding = onBack;
@@ -736,12 +764,33 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   );
 
   // Upload mode
+  // Scan result banner (review form and, after Back, the scanner): message left, actions right
+  const scanSum = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0) + taxes.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+  const scanBannerFor = (actions) => {
+    if (!scanned) return null;
+    const warn = scanCheck && !scanCheck.matches;
+    return (
+      <div style={{ ...scanBanner, ...(warn
+        ? { color: "var(--warn-text)", background: "var(--warn-soft)", border: "1px solid var(--warn-border)" }
+        : { color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)" }) }}>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          {warn ? `Adds up to ${currency}${scanSum.toFixed(2)}, bill says ${currency}${scanCheck.printedTotal.toFixed(2)}.`
+            : <><CheckIcon size={13} /> {scanCheck?.matches ? "Matches the bill total." : "Scanned. Check against the bill."}</>}
+        </span>
+        <span style={{ display: "inline-flex", gap: 14, flexShrink: 0 }}>{actions}</span>
+      </div>
+    );
+  };
+
   if (mode === "upload") {
     if (!apiConfig) return <div>{topBar}</div>; // loading, or about to bounce back without a key
     return (
-      <div>
-        {topBar}
+      <div className="fill">
+        {/* After a scan the footer has reset / back / next, so the top row would repeat them */}
+        {!scanned && topBar}
         {keySheetEl}
+        {/* Back from the scanned form: same photo, its scan result, and a way back to the items */}
+        {scanBannerFor(<button onClick={() => setMode("manual")} style={photoLinkBtn}>Edit items</button>)}
         {!canScan && (
           <div style={{ fontSize: 13, color: "var(--warn-text)", background: "var(--warn-soft)", border: "1px solid var(--warn-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 12 }}>
             You're offline. Scanning needs internet.
@@ -803,27 +852,36 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           </div>
         )}
         <style>{`@keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-6px); } }`}</style>
+        {scanned && (
+          // A scanned bill can go straight on to step 2 from here
+          <StickyFooter bleed>
+            <div style={{ display: "flex", gap: 8 }}>
+              <FooterReset onReset={onReset} needsConfirm={formHasData} />
+              <button onClick={goLanding} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
+              <button onClick={submitManual} disabled={loading} style={{
+                flex: 2, border: "none", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+                background: "var(--accent)", color: "#fff", borderRadius: 10, padding: 13, fontWeight: 700, cursor: "pointer", fontSize: 15
+              }}>Add people <ArrowRightIcon size={16} /></button>
+            </div>
+          </StickyFooter>
+        )}
       </div>
     );
   }
 
+  // Scan banner actions: compare with the bill photo, or go back and take a new one
+  const scanActions = (
+    <>
+      {lastFile && <button onClick={() => setShowPhoto(true)} style={photoLinkBtn}>View bill</button>}
+      <button onClick={() => { setError(""); setMode("upload"); }} style={photoLinkBtn}>Rescan</button>
+    </>
+  );
+
   // Manual mode (also used to review scanned results)
   const manualValid = items.some(i => i.name.trim() && parseFloat(i.amount) > 0);
-  const scannedTotal = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0) + taxes.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   return (
     <div className="fill">
-      {scanned && (scanCheck && !scanCheck.matches ? (
-        // The reader's items don't add up to the printed total: point at the gap
-        <div style={{ fontSize: 13, color: "var(--warn-text)", background: "var(--warn-soft)", border: "1px solid var(--warn-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>
-          Scanned, but this adds up to {currency}{scannedTotal.toFixed(2)} while the bill says {currency}{scanCheck.printedTotal.toFixed(2)}. Check for missed or misread lines.
-          {lastFile && <> <button onClick={() => setShowPhoto(true)} style={photoLinkBtn}>View photo</button></>}
-        </div>
-      ) : (
-        <div style={{ fontSize: 13, color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>
-          <CheckIcon size={13} /> Scanned{scanCheck?.matches ? " and it matches the bill total" : ""}. Check the items against the bill and fix anything misread.
-          {lastFile && <> <button onClick={() => setShowPhoto(true)} style={photoLinkBtn}>View photo</button></>}
-        </div>
-      ))}
+      {scanBannerFor(scanActions)}
       {showPhoto && lastFile && <PhotoSheet file={lastFile} onClose={() => setShowPhoto(false)} />}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginBottom: 16 }}>
         <div style={{ flex: 2 }}>
@@ -935,7 +993,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       <StickyFooter bleed>
         <div style={{ display: "flex", gap: 8 }}>
         <FooterReset onReset={onReset} needsConfirm={formHasData} />
-        <button onClick={goLanding} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
+        <button onClick={scanned ? () => setMode("upload") : goLanding} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
         <button onClick={submitManual} disabled={!manualValid} style={{
           flex: 2, border: "none", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
           background: manualValid ? "var(--accent)" : "var(--border)",
@@ -1619,6 +1677,7 @@ function SettingsPage({ onClose, onKeyChanged, onEraseAll, savedNames, setSavedN
 
   const removeKey = async () => {
     if (!window.confirm("Remove the saved API key from this device?")) return;
+    await forgetCloudKey(config.provider);
     await deleteSecret("vision");
     setConfig(null);
     onKeyChanged();
