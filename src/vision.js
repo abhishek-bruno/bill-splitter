@@ -258,7 +258,7 @@ async function scanOnDevice(file, provider) {
   const { isEngineReady } = await import("./local/models.js");
   if (!(await isEngineReady(id))) throw new Error("On Device AI isn't downloaded on this device. Download it again in Settings.");
   const { scanBasic } = await import("./local/basicScan.js");
-  const r = await scanBasic(file);
+  const r = await scanBasic(file, id);
   const bill = normalize({
     restaurant: r.restaurant, currency: r.currency,
     items: r.items,

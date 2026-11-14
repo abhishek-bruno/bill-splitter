@@ -1,19 +1,20 @@
-// Basic on-device engine: PaddleOCR (PP-OCRv5 mobile) in the browser, then the rule-based parser.
-import { OCR_MODELS, ORT_WASM_BASE, cachedUrl } from "./models.js";
+// On-device engines: PaddleOCR in the browser (the level picks the text models), then the rule-based parser.
+import { ENGINES, ORT_WASM_BASE, cachedUrl } from "./models.js";
 import { parseReceipt } from "./parseReceipt.js";
 
 // Each scan gets its own OCR worker, which is shut down afterwards. WebAssembly memory (ONNX Runtime,
 // OpenCV) only ever grows inside a page, so reusing one instance can run a phone out of memory by the
 // second or third photo; ending the worker hands all of it back to the browser.
-async function createOcr() {
+async function createOcr(engine = "basic") {
   const { PaddleOCR } = await import("@paddleocr/paddleocr-js");
-  const urls = await Promise.all([cachedUrl(OCR_MODELS.det.url), cachedUrl(OCR_MODELS.rec.url)]);
+  const models = ENGINES[engine].ocr;
+  const urls = await Promise.all([cachedUrl(models.det.url), cachedUrl(models.rec.url)]);
   try {
     return await PaddleOCR.create({
       worker: true,
-      textDetectionModelName: OCR_MODELS.det.name,
+      textDetectionModelName: models.det.name,
       textDetectionModelAsset: { url: urls[0] },
-      textRecognitionModelName: OCR_MODELS.rec.name,
+      textRecognitionModelName: models.rec.name,
       textRecognitionModelAsset: { url: urls[1] },
       ortOptions: { backend: "wasm", wasmPaths: ORT_WASM_BASE, numThreads: 1 }
     });
@@ -35,11 +36,11 @@ async function shrink(file, maxSide = 1800) {
   return canvas;
 }
 
-export async function readText(file) {
+export async function readText(file, engine = "basic") {
   const canvas = await shrink(file);
   let ocr = null;
   try {
-    ocr = await createOcr();
+    ocr = await createOcr(engine);
     const [result] = await ocr.predict(canvas);
     return result?.items || [];
   } finally {
@@ -50,11 +51,11 @@ export async function readText(file) {
 
 // Start and stop the OCR worker once right after the download, so the worker's own code and runtime are
 // fetched (and cached by the service worker) while online; the first real scan can then happen offline
-export async function warmUp() {
-  const ocr = await createOcr();
+export async function warmUp(engine = "basic") {
+  const ocr = await createOcr(engine);
   await ocr.dispose().catch(() => {});
 }
 
-export async function scanBasic(file) {
-  return parseReceipt(await readText(file));
+export async function scanBasic(file, engine = "basic") {
+  return parseReceipt(await readText(file, engine));
 }

@@ -8,25 +8,44 @@ const ORT_VERSION = "1.31.1"; // must match the onnxruntime-web the OCR SDK was 
 export const ORT_WASM_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 const PADDLE_BASE = "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/";
 
-export const OCR_MODELS = {
-  det: { name: "PP-OCRv5_mobile_det", url: `${PADDLE_BASE}PP-OCRv5_mobile_det_onnx_infer.tar` },
-  rec: { name: "PP-OCRv5_mobile_rec", url: `${PADDLE_BASE}PP-OCRv5_mobile_rec_onnx_infer.tar` }
-};
+const paddleModel = (name) => ({ name, url: `${PADDLE_BASE}${name}_onnx_infer.tar` });
+// Text detection + recognition models per level: mobile (small, fast) and server (larger, reads small or
+// faint print more accurately)
+const MOBILE = { det: paddleModel("PP-OCRv5_mobile_det"), rec: paddleModel("PP-OCRv5_mobile_rec") };
+const SERVER = { det: paddleModel("PP-OCRv5_server_det"), rec: paddleModel("PP-OCRv5_server_rec") };
 // ONNX Runtime's WebAssembly build (single-threaded works without special server headers)
 // (the SDK's build of the runtime loads the jsep variant, which covers both WebAssembly and WebGPU)
 const ORT_FILES = ["ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"].map(f => ORT_WASM_BASE + f);
 
+// Shown to people as levels (Basic, Plus, ...); model names stay in code
 export const ENGINES = {
   basic: {
     label: "Basic",
+    level: 1,
     sizeMB: 50,
     blurb: "Reads the text and picks out items with simple rules.",
     source: "PaddlePaddle's model server and the jsDelivr CDN",
-    files: [OCR_MODELS.det.url, OCR_MODELS.rec.url, ...ORT_FILES]
+    ocr: MOBILE,
+    files: [MOBILE.det.url, MOBILE.rec.url, ...ORT_FILES]
+  },
+  plus: {
+    label: "Plus",
+    level: 2,
+    labs: true, // being tested: shown only on devices that opened the app with ?labs=1 (or already have it)
+    sizeMB: 180,
+    blurb: "Sharper text reading for small or faint print.",
+    source: "PaddlePaddle's model server and the jsDelivr CDN",
+    ocr: SERVER,
+    files: [SERVER.det.url, SERVER.rec.url, ...ORT_FILES]
   }
 };
 
 const markKey = (id) => `spliteasy:engine:${id}`;
+
+// Engines still being tested are offered only on devices that opted in by opening the app with ?labs=1
+const LABS_KEY = "spliteasy:labs";
+try { if (new URLSearchParams(location.search).get("labs") === "1") localStorage.setItem(LABS_KEY, "1"); } catch { /* storage unavailable */ }
+export const labsOn = () => { try { return localStorage.getItem(LABS_KEY) === "1"; } catch { return false; } };
 
 // Ready = the user finished a download and every file is still cached (browsers can evict storage)
 export async function isEngineReady(id) {
