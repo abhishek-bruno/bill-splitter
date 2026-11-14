@@ -240,7 +240,7 @@ function normalize(raw) {
   const num = (v) => Math.round(parseFloat(String(v).replace(/[^0-9.-]/g, "")) * 100) / 100;
   const rows = (list, prefix) => (Array.isArray(list) ? list : [])
     .map((x, i) => ({ id: `${prefix}${Date.now()}-${i}`, name: String(x?.name || "").trim(), amount: num(x?.amount) }))
-    .filter(x => x.name && x.amount > 0);
+    .filter(x => x.name && (prefix === "t" ? x.amount !== 0 && !Number.isNaN(x.amount) : x.amount > 0)); // charges can be negative (discounts)
   const cur = String(raw?.currency || "").trim();
   return {
     restaurant: String(raw?.restaurant || "").trim(),
@@ -259,14 +259,13 @@ async function scanOnDevice(file, provider) {
   if (!(await isEngineReady(id))) throw new Error("On Device AI isn't downloaded on this device. Download it again in Settings.");
   const { scanBasic } = await import("./local/basicScan.js");
   const r = await scanBasic(file);
-  // The app has no negative charges, so a discount is spread over the items in proportion
-  const itemsSum = r.items.reduce((s, x) => s + x.amount, 0);
-  const factor = r.discount > 0 && itemsSum > 0 ? (itemsSum - r.discount) / itemsSum : 1;
   const bill = normalize({
     restaurant: r.restaurant, currency: r.currency,
-    items: r.items.map(x => ({ name: x.name, amount: x.amount * factor })),
-    taxes: r.taxes
+    items: r.items,
+    // A discount is a negative shared charge; the round-off becomes the bill's round-off switch
+    taxes: [...r.taxes, ...(r.discount > 0 ? [{ name: "Discount", amount: -r.discount }] : [])]
   });
+  bill.roundOff = Math.abs(r.round) > 0.001;
   if (bill.items.length === 0) throw new Error("Couldn't find items on this bill. Try a clearer, straight photo or enter manually.");
   bill.scanCheck = r.check; // printed vs computed total, shown on the review screen
   return bill;

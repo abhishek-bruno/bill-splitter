@@ -7,6 +7,15 @@ const money = (currency, n) => `${currency}${n.toFixed(2)}`;
 // UPI only settles in INR, so links are offered only for rupee bills
 export const supportsUpi = (bill) => bill.currency === "₹";
 
+// Round-off: with bill.roundOff on, the total goes to the nearest whole unit and the difference is shared
+// like the other charges. Raw total = items + shared charges.
+export function roundAdjust(bill) {
+  if (!bill?.roundOff) return 0;
+  const raw = (bill.items || []).reduce((s, x) => s + x.amount, 0) + (bill.taxes || []).reduce((s, x) => s + x.amount, 0);
+  return Math.round((Math.round(raw) - raw) * 100) / 100;
+}
+const chargeNames = (bill) => [...(bill.taxes || []).map(t => t.name), ...(roundAdjust(bill) ? ["Round off"] : [])].join(", ");
+
 // An item's assignment lists a person once per share: [a, a, a, b] means a had 3 of 4 shares.
 // Plain lists with no repeats are the usual even split.
 export const sharesOf = (assigned, id) => assigned.filter(x => x === id).length;
@@ -24,8 +33,8 @@ function shareLines({ bill, person, assignments }) {
       ways: new Set(assigned).size, uneven: isUneven(assigned), shares: n, of: assigned.length
     });
   });
-  if (person.shared > 0) {
-    lines.push({ label: `Shared charges (${bill.taxes.map(t => t.name).join(", ")})`, amount: person.shared, ways: 1 });
+  if (Math.abs(person.shared) >= 0.005) {
+    lines.push({ label: `Shared charges (${chargeNames(bill)})`, amount: person.shared, ways: 1 });
   }
   return lines;
 }
@@ -68,7 +77,8 @@ const publicBase = () => import.meta.env.VITE_PUBLIC_URL || (location.protocol =
 // The whole split packed as small as possible for the URL hash (never sent to the server).
 // Plain text with control-character separators (no JSON quotes or brackets), then base64url:
 //   fields  (RS \x1e): version, place, currency ("" = ₹), payee ("" = first person), upiId, recipientIdx ("-" = group),
-//                      names, items, charges, paidMask, chargeSplit ("p" = in proportion to items)
+//                      names, items, charges, paidMask, chargeSplit ("p" = in proportion to items),
+//                      roundOff ("1" = total rounded to the nearest whole unit)
 //   lists   (GS \x1d): one entry per name / item / charge
 //   parts   (US \x1f): item = name, amount, peopleMask ("" = everyone), shares (only when uneven: base36
 //                      counts for the masked people in list order, joined by "."); charge = name, amount
@@ -100,7 +110,8 @@ function packSplit({ bill, person, assignments, people, payment, paid = {} }) {
     }).join(GS),
     (bill.taxes || []).map(t => [clean(t.name), t.amount].join(US)).join(GS),
     (mask(Object.keys(paid).filter(id => paid[id])) || "").toString(36),
-    bill.taxSplit === "proportional" ? "p" : ""
+    bill.taxSplit === "proportional" ? "p" : "",
+    bill.roundOff ? "1" : ""
   ];
   while (fields.length && fields[fields.length - 1] === "") fields.pop();
   const bytes = new TextEncoder().encode(fields.join(RS));

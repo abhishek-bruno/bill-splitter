@@ -4,7 +4,7 @@ import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey, is
 import { ENGINES, isEngineReady, downloadEngine, removeEngine } from "./local/models.js";
 import { saveSecret, loadSecret, deleteSecret, clearAllSecrets } from "./secureStore.js";
 import InstallBanner from "./InstallPrompt.jsx";
-import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy, upiRequest, copyText, sharesOf, isUneven } from "./payment.js";
+import { UPI_ID_PATTERN, supportsUpi, buildShareText, buildGroupShareText, shareOrCopy, upiRequest, copyText, sharesOf, isUneven, roundAdjust } from "./payment.js";
 import { PayQrSheet, Sheet } from "./GPay.jsx";
 
 const COLORS = [
@@ -380,6 +380,22 @@ function ApiKeySettings({ config, onSave, onCancel, heading = true, children }) 
   );
 }
 
+// The scanned bill photo, to compare with what was read
+function PhotoSheet({ file, onClose }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return (
+    <Sheet title="Bill photo" onClose={onClose}>
+      {url && <img src={url} alt="Scanned bill" style={{ width: "100%", borderRadius: 10, display: "block" }} />}
+    </Sheet>
+  );
+}
+const photoLinkBtn = { background: "none", border: "none", padding: 0, color: "inherit", fontWeight: 700, fontSize: 13, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2, fontFamily: "inherit" };
+
 // How bills are read, as a bottom sheet (scan flow and Settings): on this device, or a cloud AI with your key
 function ApiKeySheet({ config, onSave, onClose, onRemove }) {
   const local = isLocalProvider(config?.provider);
@@ -514,6 +530,7 @@ const readerLabel = (cfg) => isLocalProvider(cfg?.provider)
 
 // Small per-device preferences; storage can be unavailable (private mode), so failures are ignored
 const TAX_SPLIT_PREF = "spliteasy:taxSplit";
+const ROUND_OFF_PREF = "spliteasy:roundOff";
 const readPref = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
 const writePref = (key, value) => { try { localStorage.setItem(key, value); } catch { /* storage unavailable */ } };
 
@@ -525,6 +542,10 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const [taxes, setTaxes] = useState(() => toRows(initial?.taxes, "t1"));
   // "equal" | "proportional", chosen on the Assign step. A new bill starts with the last choice made on this device.
   const [taxSplit] = useState(() => initial?.taxSplit || readPref(TAX_SPLIT_PREF) || "equal");
+  // Round the total to the nearest rupee; a new bill starts with the last choice made on this device
+  const [roundOff, setRoundOffState] = useState(() => initial?.roundOff ?? readPref(ROUND_OFF_PREF) === "1");
+  const setRoundOff = (on) => { setRoundOffState(on); writePref(ROUND_OFF_PREF, on ? "1" : "0"); };
+  const [showPhoto, setShowPhoto] = useState(false);
 
   // Photo scanning
   const [apiConfig, setApiConfig] = useState(undefined); // undefined = loading, null = not set
@@ -587,6 +608,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       setItems(toRows(bill.items, "1"));
       setTaxes(toRows(bill.taxes, "t1"));
       setScanCheck(bill.scanCheck || null);
+      if (bill.roundOff) setRoundOffState(true); // the bill shows a round-off line
       setScanned(true);
       setMode("manual");
     } catch (e) {
@@ -617,9 +639,11 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
     const validItems = items.filter(i => i.name.trim() && parseFloat(i.amount) > 0)
       .map(i => ({ ...i, name: i.name.trim(), amount: parseFloat(i.amount) }));
     if (validItems.length === 0) { setError("Add at least one item with a name and amount."); return; }
-    const validTaxes = taxes.filter(t => t.name.trim() && parseFloat(t.amount) > 0)
+    // Charges can be negative (a discount)
+    const validTaxes = taxes.filter(t => t.name.trim() && parseFloat(t.amount) && !Number.isNaN(parseFloat(t.amount)))
       .map(t => ({ ...t, name: t.name.trim(), amount: parseFloat(t.amount) }));
-    const total = validItems.reduce((s, i) => s + i.amount, 0) + validTaxes.reduce((s, t) => s + t.amount, 0);
+    const raw = validItems.reduce((s, i) => s + i.amount, 0) + validTaxes.reduce((s, t) => s + t.amount, 0);
+    const total = raw + roundAdjust({ items: validItems, taxes: validTaxes, roundOff });
     onDone({
       restaurant: restaurant.trim() || "My Bill",
       currency,
@@ -627,6 +651,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       taxes: validTaxes,
       // Keep a choice made on Assign since this form opened; a new bill uses the remembered one
       taxSplit: initial?.taxSplit || taxSplit,
+      roundOff,
       total
     });
   };
@@ -791,12 +816,15 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
         // The reader's items don't add up to the printed total: point at the gap
         <div style={{ fontSize: 13, color: "var(--warn-text)", background: "var(--warn-soft)", border: "1px solid var(--warn-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>
           Scanned, but this adds up to {currency}{scannedTotal.toFixed(2)} while the bill says {currency}{scanCheck.printedTotal.toFixed(2)}. Check for missed or misread lines.
+          {lastFile && <> <button onClick={() => setShowPhoto(true)} style={photoLinkBtn}>View photo</button></>}
         </div>
       ) : (
         <div style={{ fontSize: 13, color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}>
-          <CheckIcon size={13} /> Scanned{scanCheck?.matches ? " and it matches the bill total" : ""}. Check the items against the bill (total {currency}{scannedTotal.toFixed(2)}) and fix anything misread.
+          <CheckIcon size={13} /> Scanned{scanCheck?.matches ? " and it matches the bill total" : ""}. Check the items against the bill and fix anything misread.
+          {lastFile && <> <button onClick={() => setShowPhoto(true)} style={photoLinkBtn}>View photo</button></>}
         </div>
       ))}
+      {showPhoto && lastFile && <PhotoSheet file={lastFile} onClose={() => setShowPhoto(false)} />}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginBottom: 16 }}>
         <div style={{ flex: 2 }}>
           <label style={{ display: "block", fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Restaurant / Place</label>
@@ -861,7 +889,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
               <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--subtle)", fontSize: 13 }}>{currency}</span>
               <input
                 value={tax.amount} onChange={e => updateTax(tax.id, "amount", e.target.value)}
-                placeholder="0.00" type="number" inputMode="decimal" min="0" step="0.01"
+                placeholder="0.00" type="number" inputMode="decimal" step="0.01" title="Use a minus sign for a discount"
                 style={{ ...inputStyle, paddingLeft: 24 }}
               />
             </div>
@@ -876,6 +904,31 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
         padding: "8px 14px", color: "var(--subtle)", cursor: "pointer", fontSize: 13,
         width: "100%", marginBottom: 20
       }}>+ Add charge</button>
+
+      {(() => {
+        // Running total, to check against the paper bill
+        const itemSum = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
+        const chargeSum = taxes.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+        const adj = roundOff ? Math.round((Math.round(itemSum + chargeSum) - (itemSum + chargeSum)) * 100) / 100 : 0;
+        const fmt = (n) => `${n < 0 ? "−" : ""}${currency}${Math.abs(n).toFixed(2)}`;
+        const row = (label, value, strong) => (
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: strong ? 15 : 13, fontWeight: strong ? 700 : 400, color: strong ? "var(--text)" : "var(--muted)", padding: "3px 0" }}>
+            <span>{label}</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{value}</span>
+          </div>
+        );
+        return (
+          <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 14px", marginBottom: 20 }}>
+            {row("Items", fmt(itemSum))}
+            {chargeSum !== 0 && row("Shared charges", fmt(chargeSum))}
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--muted)", padding: "3px 0", cursor: "pointer" }}>
+              <input type="checkbox" checked={roundOff} onChange={e => setRoundOff(e.target.checked)} style={{ accentColor: "var(--accent)", width: 16, height: 16, margin: 0 }} />
+              <span style={{ flex: 1 }}>Round off</span>
+              {roundOff && <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(adj)}</span>}
+            </label>
+            <div style={{ borderTop: "1px solid var(--border)", marginTop: 6, paddingTop: 6 }}>{row("Total", fmt(itemSum + chargeSum + adj), true)}</div>
+          </div>
+        );
+      })()}
 
       {error && <div style={{ color: "var(--danger)", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
@@ -1136,7 +1189,8 @@ function AssignStep({ bill, people, assignments, setAssignments, onTaxSplit }) {
 // ── Totals & dates ────────────────────────────────────────────────────────────
 // Shared charges are split equally, or (bill.taxSplit === "proportional") in proportion to what each person had
 function computeTotals(bill, people, assignments) {
-  const taxTotal = bill.taxes?.reduce((s, t) => s + t.amount, 0) || 0;
+  // Shared pool: charges plus the round-off (if on), split the same way
+  const taxTotal = (bill.taxes?.reduce((s, t) => s + t.amount, 0) || 0) + roundAdjust(bill);
   const withItems = people.map(p => {
     let itemTotal = 0;
     bill.items?.forEach(item => {
@@ -1211,7 +1265,8 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
       if (!n) return;
       lines.push({ label: item.name, note: isUneven(assigned) && n > 1 ? `×${n}` : "", amount: item.amount * n / assigned.length });
     });
-    if (p.shared > 0) lines.push({ label: `Shared charges (${bill.taxes.map(t => t.name).join(", ")})`, note: "", amount: p.shared });
+    const names = [...bill.taxes.map(t => t.name), ...(roundAdjust(bill) ? ["Round off"] : [])].join(", ");
+    if (Math.abs(p.shared) >= 0.005) lines.push({ label: `Shared charges (${names})`, note: "", amount: p.shared });
     return lines;
   };
   const lineRow = (key, label, note, amount, color) => (
@@ -1298,6 +1353,7 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
                   return lineRow(item.id, item.name, `· ${names.join(", ") || "unassigned"}`, item.amount, "#fff");
                 })}
                 {bill.taxes?.map(t => lineRow(`tax-${t.id}`, t.name, bill.taxSplit === "proportional" ? "· proportional" : "· everyone", t.amount, "#fff"))}
+                {roundAdjust(bill) !== 0 && lineRow("round", "Round off", "", roundAdjust(bill), "#fff")}
               </div>
             )}
           </div>

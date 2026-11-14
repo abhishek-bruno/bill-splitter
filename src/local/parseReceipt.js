@@ -7,10 +7,11 @@ const MONEY = /(?:^|\s)(-?\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?|-?\d+(?:\.\d{1,2})?
 const CURRENCY_TOKENS = [[/₹|\brs\.?\b|\binr\b/i, "₹"], [/\$|\busd\b/i, "$"], [/€|\beur\b/i, "€"], [/£|\bgbp\b/i, "£"]];
 
 // Row kinds by keyword (checked in this order)
-const IS_NOISE = /(?:^|[^a-z])(gstin|gst\s*no|fssai|cin|pan\b|phone|ph\.?|mob(ile)?|tel|email|www\.|\.com|date|time|bill\s*no|invoice|inv\s*no|order\s*no|kot|table|tbl|cashier|server|steward|waiter|captain|guests?|pax|covers?|thank|visit\s*again|welcome|hsn|sac|qty|rate|amount\s*\(|particulars|description|item\s*name|dine\s*in|take\s*away|takeaway|parcel\s*no|token)(?![a-z])|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{1,2}:\d{2}/i;
+const IS_NOISE = /(?:^|[^a-z])(tin|contact|invoice|pax|print|powered|steward|items?\s*:|gstin|gst\s*no|fssai|cin|pan\b|phone|ph\.?|mob(ile)?|tel|email|www\.|\.com|date|time|bill\s*no|invoice|inv\s*no|order\s*no|kot|table|tbl|cashier|server|steward|waiter|captain|guests?|pax|covers?|thank|visit\s*again|welcome|hsn|sac|qty|rate|amount\s*\(|particulars|description|item\s*name|dine\s*in|take\s*away|takeaway|parcel\s*no|token)(?![a-z])|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{1,2}:\d{2}|[a-z0-9]*\d{5,}[a-z0-9]*/i;
 const IS_SUBTOTAL = /\b(sub\s*-?\s*total|food\s*total|item\s*total)\b/i;
-const IS_TOTAL = /\b(grand\s*total|net\s*(amount|amt|total|payable)|total\s*(amount|amt|payable|due)?|amount\s*payable|bill\s*amount|to\s*pay|balance\s*due)\b/i;
-const IS_ROUND = /\bround(ing|ed)?\s*(off)?\b|\br\/?o\b/i;
+const IS_TOTAL = /\b(grand\s*total|gross\s*(amount|amt|total)?|net\s*(amount|amt|total|payable)|total\s*(amount|amt|payable|due)?|amount\s*payable|bill\s*amount|to\s*pay|balance\s*due)\b|^\s*amount\s*$/i;
+// Also when the edge of the paper cut off the "R" and OCR guessed the rest ("ound off", "pund off")
+const IS_ROUND = /\b[a-z]{0,3}und(ing|ed)?\s*-?\s*off\b|\bround(ing|ed)?\b|\br\/o\b/i;
 const IS_DISCOUNT = /\b(discount|disc\.?|less|offer|coupon|promo|savings?)\b/i;
 const IS_CHARGE = /(^|[^a-z])(c\s*gst|s\s*gst|i\s*gst|u\s*gst|gst|vat|tax|cess|service\s*(charge|chg|tax)?|s\.?\s*c\.?|packing|packaging|parcel|delivery|tip|surcharge)(?![a-z])/i;
 const IS_ADDRESS = /(^|[^a-z])(add(ress)?|road|rd|street|st\.|sector|market|nagar|lane|floor|near|opp|cross|main|layout|colony|plot|shop\s*no|phase|block|dist|pin)(?![a-z])|\d{6}|,.*,/i;
@@ -132,7 +133,8 @@ export function parseReceipt(ocrItems) {
   const currency = (CURRENCY_TOKENS.find(([re]) => re.test(allText)) || [null, ""])[1];
 
   const items = [], taxes = [];
-  let total = null, subtotal = null, round = 0, discount = 0, firstItemRow = -1, pendingName = "", lastWasItem = false;
+  let subtotal = null, round = 0, discount = 0, firstItemRow = -1, pendingName = "", lastWasItem = false;
+  const totals = []; // every total-like amount ("Net All Total" can be pre-tax, "Gross Amount" the final)
 
   rows.forEach((row, i) => {
     const { label, amount } = splitAmount(row.text);
@@ -154,7 +156,7 @@ export function parseReceipt(ocrItems) {
     const kindText = label || row.text;
     if (IS_PAYMENT.test(kindText) && !IS_TOTAL.test(kindText)) { pendingName = ""; return; }
     if (IS_SUBTOTAL.test(kindText)) subtotal = amount;
-    else if (IS_TOTAL.test(kindText)) total = amount; // the last total wins (grand total comes last)
+    else if (IS_TOTAL.test(kindText)) totals.push(amount);
     else if (IS_ROUND.test(kindText)) round += amount;
     else if (IS_DISCOUNT.test(kindText)) discount += Math.abs(amount);
     else if (IS_CHARGE.test(kindText)) {
@@ -174,14 +176,23 @@ export function parseReceipt(ocrItems) {
     pendingName = "";
   });
 
+  // The printed total: the total-like amount that agrees with items + charges, else the largest one
+  const taxSum0 = taxes.reduce((s, x) => s + x.amount, 0);
+  const itemsSum0 = items.reduce((s, x) => s + x.amount, 0);
+  const expected = itemsSum0 + taxSum0 - discount + round;
+  let total = totals.find(t => Math.abs(t - expected) <= 1) ?? (totals.length ? Math.max(...totals) : null);
+  // A total-like amount equal to the items alone is the subtotal
+  if (subtotal === null) subtotal = totals.find(t => t !== total && Math.abs(t - itemsSum0) <= 1) ?? null;
+
   // Repair prices glued to quantities first, then drop anything still bigger than the whole bill
-  fixMergedQuantities(items, subtotal ?? (total !== null ? total - taxes.reduce((s, x) => s + x.amount, 0) + discount - round : null));
+  fixMergedQuantities(items, subtotal ?? (total !== null ? total - taxSum0 + discount - round : null));
   if (total !== null) for (let k = items.length - 1; k >= 0; k--) if (items[k].amount > total) items.splice(k, 1);
+  if (total !== null && !totals.some(t => Math.abs(t - total) < 0.01)) total = null;
 
   // Restaurant: the tallest text line above the first item, skipping addresses, phones and tax ids
   const headerRows = rows.slice(0, firstItemRow < 0 ? Math.min(4, rows.length) : firstItemRow)
     .filter(r => /[a-z]{3}/i.test(r.text) && !IS_NOISE.test(r.text) && !IS_ADDRESS.test(r.text) && !MONEY.test(r.text));
-  const restaurant = headerRows.length ? cleanName(headerRows.reduce((a, b) => (b.height > a.height * 1.15 ? b : a)).text) : "";
+  const restaurant = headerRows.length ? cleanName(headerRows.reduce((a, b) => (b.height > a.height * 1.4 ? b : a)).text) : "";
 
   // Check the result against the printed total
   const itemsSum = items.reduce((s, x) => s + x.amount, 0);
@@ -189,6 +200,6 @@ export function parseReceipt(ocrItems) {
   const computed = Math.round((itemsSum + taxSum - discount + round) * 100) / 100;
   const check = total !== null ? { printedTotal: total, computedTotal: computed, matches: Math.abs(total - computed) <= 1 } : null;
 
-  return { restaurant, currency, items, taxes, discount, subtotal, check };
+  return { restaurant, currency, items, taxes, discount, round, subtotal, check };
 }
 export { toRows }; // for tests

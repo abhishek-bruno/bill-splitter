@@ -103,7 +103,7 @@
           items: list(f[7]).map(function (e) {
             return [e[0], e[1], e[2] ? parseInt(e[2], 36) : everyone, e[3] ? e[3].split(".").map(function (x) { return parseInt(x, 36) || 0; }) : null];
           }),
-          taxes: list(f[8]), paid: f[9] ? parseInt(f[9], 36) : 0, byItems: f[10] === "p"
+          taxes: list(f[8]), paid: f[9] ? parseInt(f[9], 36) : 0, byItems: f[10] === "p", roundOff: f[11] === "1"
         };
       }
 
@@ -133,8 +133,14 @@
           return { name: name, total: total, lines: lines, paid: !!(s.paid & (1 << i)) };
         });
         var itemsSum = people.reduce(function (t, p) { return t + p.total; }, 0);
+        // Round-off: the whole bill to the nearest unit, the difference shared like the charges
+        if (s.roundOff) {
+          var raw = s.items.reduce(function (t, it) { return t + (Number(it[1]) || 0); }, 0) + taxTotal;
+          var adj = Math.round((Math.round(raw) - raw) * 100) / 100;
+          if (adj) { taxTotal += adj; taxNames = taxNames ? taxNames + ", Round off" : "Round off"; }
+        }
         people.forEach(function (p) {
-          if (taxTotal <= 0) return;
+          if (!taxTotal) return;
           var part = s.byItems && itemsSum > 0 ? taxTotal * p.total / itemsSum : taxTotal / n;
           p.total += part;
           p.lines.push(["Shared charges (" + taxNames + ")", part]);
