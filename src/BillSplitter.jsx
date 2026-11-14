@@ -303,11 +303,12 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   }, [focusRowId]);
 
   const addItem = () => { const row = blankItem(); setItems(prev => [...prev, row]); setFocusRowId(row.id); };
-  const removeItem = (id) => setItems(prev => prev.filter(x => x.id !== id));
+  // Removing the last row clears it instead, so there's always one row to type into.
+  const removeItem = (id) => setItems(prev => prev.length > 1 ? prev.filter(x => x.id !== id) : [blankItem()]);
   const updateItem = (id, field, val) => setItems(prev => prev.map(x => x.id === id ? { ...x, [field]: val } : x));
 
   const addTax = () => { const row = blankItem(); setTaxes(prev => [...prev, row]); setFocusRowId(row.id); };
-  const removeTax = (id) => setTaxes(prev => prev.filter(x => x.id !== id));
+  const removeTax = (id) => setTaxes(prev => prev.length > 1 ? prev.filter(x => x.id !== id) : [blankItem()]);
   const updateTax = (id, field, val) => setTaxes(prev => prev.map(x => x.id === id ? { ...x, [field]: val } : x));
 
   const submitManual = () => {
@@ -511,7 +512,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
                 style={{ ...inputStyle, paddingLeft: 24 }}
               />
             </div>
-            {items.length > 1 && (
+            {(items.length > 1 || item.name || item.amount) && (
               <button onClick={() => removeItem(item.id)} style={{ background: "none", border: "none", color: "var(--border-strong)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}>×</button>
             )}
           </div>
@@ -544,7 +545,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
                 style={{ ...inputStyle, paddingLeft: 24 }}
               />
             </div>
-            {taxes.length > 1 && (
+            {(taxes.length > 1 || tax.name || tax.amount) && (
               <button onClick={() => removeTax(tax.id)} style={{ background: "none", border: "none", color: "var(--border-strong)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}>×</button>
             )}
           </div>
@@ -591,16 +592,40 @@ function NameChip({ name, onPick, onForget }) {
 function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
   const [name, setName] = useState("");
 
-  const addPerson = (raw = name) => {
-    const n = raw.trim();
-    if (!n || people.find(p => sameName(p.name, n))) return;
+  // Adds several names at once (contact picker), skipping blanks and anyone already in the list
+  const addPeople = (raws) => {
+    const added = [];
     setPeople(prev => {
-      const used = new Set(prev.map(p => p.color));
-      const color = COLORS.find(c => !used.has(c)) || COLORS[prev.length % COLORS.length];
-      return [...prev, { id: Date.now().toString(), name: n, color }];
+      const next = [...prev];
+      raws.forEach(raw => {
+        const n = raw.trim();
+        if (!n || next.some(p => sameName(p.name, n))) return;
+        const used = new Set(next.map(p => p.color));
+        const color = COLORS.find(c => !used.has(c)) || COLORS[next.length % COLORS.length];
+        next.push({ id: `${Date.now()}-${next.length}`, name: n, color });
+        added.push(n);
+      });
+      return next;
     });
-    setSavedNames(prev => remember(prev, [n], MAX_SAVED_NAMES));
+    if (added.length) setSavedNames(prev => remember(prev, added, MAX_SAVED_NAMES));
+  };
+
+  const addPerson = (raw = name) => {
+    if (!raw.trim()) return;
+    addPeople([raw]);
     setName("");
+  };
+
+  // Contact Picker API: Chrome on Android only, so the button is hidden elsewhere.
+  // Only names are read; nothing leaves the device.
+  const canPickContacts = typeof navigator !== "undefined" && "contacts" in navigator && "select" in (navigator.contacts || {});
+  const pickContacts = async () => {
+    try {
+      const picked = await navigator.contacts.select(["name"], { multiple: true });
+      addPeople(picked.map(c => c.name?.[0] || ""));
+    } catch {
+      // Picker closed or blocked; nothing to add
+    }
   };
 
   const forgetName = (n) => setSavedNames(prev => forget(prev, n));
@@ -632,6 +657,13 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
           borderRadius: 8, padding: "10px 18px", fontWeight: 600, cursor: "pointer", fontSize: 14
         }}>Add</button>
       </div>
+      {canPickContacts && (
+        <button onClick={pickContacts} style={{
+          background: "none", border: "1.5px dashed var(--border-strong)", borderRadius: 8,
+          padding: "8px 14px", color: "var(--muted)", cursor: "pointer", fontSize: 13,
+          width: "100%", marginBottom: 16
+        }}>👥 Add from contacts</button>
+      )}
       {suggestions.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--subtle)", marginBottom: 6 }}>Recent</div>
@@ -766,7 +798,7 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
 
   const [status, setStatus] = useState({}); // person id -> "shared" | "copied"
   const sharePayment = async (p) => {
-    const text = buildShareText({ bill, person: p, assignments, people, payment });
+    const text = buildShareText({ bill, person: p, assignments, people: totals, payment, paid });
     const result = await shareOrCopy(text);
     if (result === "cancelled") return;
     setStatus(prev => ({ ...prev, [p.id]: result }));
@@ -802,7 +834,7 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
       <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Each person owes</div>
       {supportsUpi(bill) && !payment?.upiId && people.length > 1 && (
         <div style={{ fontSize: 13, color: "var(--muted)", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 14px", marginBottom: 12 }}>
-          Add your UPI ID to include a pay link in shared messages.{" "}
+          Add your UPI ID so shared links get a UPI pay button.{" "}
           <button onClick={onOpenSettings} style={{ background: "none", border: "none", padding: 0, color: "var(--accent)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Add UPI ID →</button>
         </div>
       )}

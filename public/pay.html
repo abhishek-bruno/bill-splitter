@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex" />
-  <title>Pay by UPI</title>
+  <title>Payment request</title>
   <style>
     :root { --bg: #f3f4f6; --card: #fff; --text: #111; --muted: #6b7280; --accent: #6366f1; --line: #e5e7eb; }
     @media (prefers-color-scheme: dark) {
       :root { --bg: #111318; --card: #1c1f26; --text: #f3f4f6; --muted: #9ca3af; --line: #2d313a; }
     }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px;
       background: var(--bg); color: var(--text); font-family: -apple-system, "Inter", system-ui, sans-serif; }
     .card { width: 100%; max-width: 380px; background: var(--card); border-radius: 20px; padding: 28px 24px; text-align: center;
       box-shadow: 0 4px 32px #0001; }
@@ -25,49 +25,224 @@
     .id code { display: block; font-size: 15px; color: var(--text); margin: 6px 0 10px; word-break: break-all; }
     button { font: inherit; background: none; border: 1.5px solid var(--line); color: var(--text); border-radius: 10px; padding: 8px 14px; cursor: pointer; }
     .error { color: #ef4444; }
+    .items { list-style: none; padding: 0; margin: 0 0 24px; text-align: left; border-top: 1px solid var(--line); }
+    .items li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .items li span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .hint { color: var(--muted); font-size: 13px; margin: 0; }
+    .footer { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; }
+    .footer a { color: var(--accent); font-weight: 600; text-decoration: none; }
+    .footer img { width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; }
+    .pay.small { display: inline-block; font-size: 13px; padding: 6px 12px; border-radius: 8px; margin-top: 8px; }
+    .toggle { width: 100%; margin-top: 16px; font-weight: 600; font-size: 14px; color: var(--accent); }
+    .split { margin-top: 16px; text-align: left; }
+    .split .sum { color: var(--muted); font-size: 13px; text-align: center; margin-bottom: 8px; }
+    .person { padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .person:last-child { border-bottom: none; }
+    .person .row { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; font-weight: 600; }
+    .person .row span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .person .tag { font-weight: 500; font-size: 12px; color: var(--muted); margin-left: 6px; }
+    .person .tag.ok { color: #16a34a; }
+    .person .lines { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <main class="card" id="card">
-    <div class="label">Payment request</div>
+    <div class="label" id="label">Payment request</div>
     <div class="amount" id="amount"></div>
     <div class="to" id="to"></div>
     <div class="note" id="note"></div>
-    <a class="pay" id="pay">Pay with UPI app</a>
-    <div class="id">
+    <ul class="items" id="items" hidden></ul>
+    <a class="pay" id="pay" hidden>Pay with UPI app</a>
+    <div class="id" id="upibox" hidden>
       Or pay manually to this UPI ID
       <code id="upi"></code>
       <button id="copy" type="button">Copy UPI ID</button>
     </div>
+    <button class="toggle" id="toggle" type="button" hidden>View full split</button>
+    <div class="split" id="split" hidden></div>
   </main>
+  <footer class="footer">
+    <a href="./"><img src="logo.svg" alt="" />SplitEasy</a> · split bills with friends
+  </footer>
   <script>
     (function () {
-      var q = new URLSearchParams(location.search);
-      var pa = q.get("pa") || "";
-      var pn = q.get("pn") || "";
-      var am = q.get("am") || "";
-      var tn = q.get("tn") || "";
+      var UPI = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/;
       var card = document.getElementById("card");
+      var $ = function (id) { return document.getElementById(id); };
+      var el = function (tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text != null) e.textContent = text;
+        return e;
+      };
 
-      if (!/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/.test(pa) || !/^\d+(\.\d{1,2})?$/.test(am)) {
+      function fail() {
         card.textContent = "";
-        var p = document.createElement("p");
-        p.className = "error";
-        p.textContent = "This payment link is invalid or incomplete.";
-        card.appendChild(p);
+        card.appendChild(el("p", "error", "This payment link is invalid or incomplete."));
+      }
+
+      // Packed split in the hash (see packSplit in src/payment.js)
+      function unpack(hash) {
+        // Use only the leading base64 run: pasting a multi-line message into the address bar can glue
+        // whatever followed the link (e.g. "upi://pay?...") onto the hash
+        var b64 = (decodeURIComponent(hash).match(/^[A-Za-z0-9+\/_-]+/) || [""])[0].replace(/-/g, "+").replace(/_/g, "/");
+        var bin = atob(b64 + "===".slice((b64.length + 3) % 4));
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        var f = new TextDecoder().decode(bytes).split("\x1e");
+        if (f[0] !== "2" || !f[6]) throw new Error("bad");
+        var list = function (v) { return v ? v.split("\x1d").map(function (e) { return e.split("\x1f"); }) : []; };
+        var names = f[6].split("\x1d");
+        var everyone = Math.pow(2, names.length) - 1;
+        return {
+          note: f[1] ? f[1] + " bill" : "", c: (f[2] || "₹").slice(0, 4), payee: f[3] || names[0],
+          upi: f[4] || "", me: f[5] === "-" ? -1 : Number(f[5]) || 0, names: names,
+          items: list(f[7]).map(function (e) { return [e[0], e[1], e[2] ? parseInt(e[2], 36) : everyone]; }),
+          taxes: list(f[8]), paid: f[9] ? parseInt(f[9], 36) : 0
+        };
+      }
+
+      // Same rules as computeTotals: items split among the people on them, shared charges split among everyone
+      function shares(s) {
+        var n = s.names.length || 1;
+        var taxTotal = s.taxes.reduce(function (t, x) { return t + (Number(x[1]) || 0); }, 0);
+        var taxNames = s.taxes.map(function (x) { return String(x[0]); }).join(", ");
+        return s.names.map(function (name, i) {
+          var lines = [], total = 0;
+          s.items.forEach(function (it) {
+            var m = Number(it[2]) || 0;
+            if (!(m & (1 << i))) return;
+            var ways = 0;
+            for (var k = 0; k < s.names.length; k++) if (m & (1 << k)) ways++;
+            var amt = (Number(it[1]) || 0) / ways;
+            total += amt;
+            lines.push([String(it[0]), amt]);
+          });
+          if (taxTotal > 0) { total += taxTotal / n; lines.push(["Shared charges (" + taxNames + ")", taxTotal / n]); }
+          return { name: name, total: total, lines: lines, paid: !!(s.paid & (1 << i)) };
+        });
+      }
+
+      function money(c, n) { return c + n.toFixed(2); }
+
+      // UPI only when a valid ID was sent and the bill is in rupees
+      function hasUpi(v) { return v.c === "₹" && UPI.test(v.upi); }
+      function upiHref(v, amount) {
+        var params = new URLSearchParams({ pa: v.upi, pn: v.payee, am: amount.toFixed(2), cu: "INR" });
+        if (v.note) params.set("tn", v.note.slice(0, 50));
+        return "upi://pay?" + params.toString();
+      }
+      function showUpiId(v) {
+        $("upibox").hidden = false;
+        $("upi").textContent = v.upi;
+        $("copy").addEventListener("click", function (e) {
+          navigator.clipboard.writeText(v.upi).then(function () { e.target.textContent = "Copied"; });
+        });
+      }
+      function settleHint(v) {
+        card.insertBefore(el("p", "hint", v.payee ? "Settle up with " + v.payee + " directly." : "Settle up with the person who paid."), $("toggle"));
+      }
+
+      function render(v) {
+        // Name whose share this is rather than assuming the reader: group links get opened by anyone
+        if (v.who) $("label").textContent = v.who + "\u2019s share";
+        $("amount").textContent = money(v.c, v.amount);
+        $("to").textContent = v.payee ? "to " + v.payee : "";
+        $("note").textContent = v.note;
+
+        var list = $("items");
+        v.lines.forEach(function (l) {
+          var li = el("li");
+          li.appendChild(el("span", null, l[0]));
+          li.appendChild(el("span", null, isNaN(l[1]) ? "" : money(v.c, l[1])));
+          list.appendChild(li);
+        });
+        if (list.children.length) list.hidden = false;
+
+        if (hasUpi(v)) {
+          $("pay").href = upiHref(v, v.amount);
+          $("pay").hidden = false;
+          showUpiId(v);
+        } else settleHint(v);
+
+        if (v.everyone) renderSplit(v, false);
+      }
+
+      // Group link: the whole bill with everyone's share open, and a pay button per person still owing
+      function renderGroup(v) {
+        var billTotal = v.everyone.reduce(function (t, p) { return t + p.total; }, 0);
+        $("label").textContent = v.note || "Bill split";
+        $("amount").textContent = money(v.c, billTotal);
+        $("to").textContent = "paid by " + v.everyone[0].name;
+        if (hasUpi(v)) showUpiId(v); else settleHint(v);
+        renderSplit(v, true);
+        // "Or pay manually" reads right only after the per-person pay buttons
+        card.appendChild($("upibox"));
+      }
+
+      function renderSplit(v, open) {
+        var box = $("split"), toggle = $("toggle");
+        var billTotal = v.everyone.reduce(function (t, p) { return t + p.total; }, 0);
+        if (!open) box.appendChild(el("div", "sum", "Bill " + money(v.c, billTotal) + " · " + v.everyone.length + " people"));
+        v.everyone.forEach(function (p, i) {
+          var row = el("div", "person");
+          var top = el("div", "row");
+          var who = el("span", null, p.name);
+          if (i === 0) who.appendChild(el("span", "tag", "paid the bill"));
+          else if (p.paid) who.appendChild(el("span", "tag ok", "✓ paid"));
+          top.appendChild(who);
+          top.appendChild(el("span", null, money(v.c, p.total)));
+          row.appendChild(top);
+          if (p.lines.length) row.appendChild(el("div", "lines", p.lines.map(function (l) { return l[0] + " " + money(v.c, l[1]); }).join(" · ")));
+          if (open && i > 0 && !p.paid && hasUpi(v)) {
+            var btn = el("a", "pay small", "Pay " + money(v.c, p.total) + " with UPI");
+            btn.href = upiHref(v, Math.round(p.total * 100) / 100);
+            row.appendChild(btn);
+          }
+          box.appendChild(row);
+        });
+        if (open) { box.hidden = false; return; }
+        toggle.hidden = false;
+        toggle.addEventListener("click", function () {
+          box.hidden = !box.hidden;
+          toggle.textContent = box.hidden ? "View full split" : "Hide full split";
+        });
+      }
+
+      // Changing only the hash keeps the same document, so re-run from scratch for the new link
+      window.addEventListener("hashchange", function () { location.reload(); });
+
+      var hash = location.hash.slice(1);
+      if (hash) {
+        try {
+          var s = unpack(hash);
+          var everyone = shares(s);
+          if (s.me === -1) {
+            renderGroup({ c: s.c, payee: s.payee, note: s.note, upi: s.upi, everyone: everyone });
+            return;
+          }
+          var mine = everyone[s.me];
+          if (!mine) throw new Error("bad");
+          render({
+            c: s.c, payee: s.payee, note: s.note, upi: s.upi, me: s.me, who: mine.name,
+            amount: Math.round(mine.total * 100) / 100, lines: mine.lines, everyone: everyone
+          });
+        } catch (e) { console.error(e); fail(); }
         return;
       }
 
-      var params = new URLSearchParams({ pa: pa, pn: pn, am: am, cu: "INR" });
-      if (tn) params.set("tn", tn.slice(0, 50));
-
-      document.getElementById("amount").textContent = "₹" + Number(am).toFixed(2);
-      document.getElementById("to").textContent = pn ? "to " + pn : "";
-      document.getElementById("note").textContent = tn;
-      document.getElementById("pay").href = "upi://pay?" + params.toString();
-      document.getElementById("upi").textContent = pa;
-      document.getElementById("copy").addEventListener("click", function (e) {
-        navigator.clipboard.writeText(pa).then(function () { e.target.textContent = "Copied"; });
+      // Older links carried one person's share in the query string
+      var q = new URLSearchParams(location.search);
+      var am = q.get("am") || "";
+      if (!/^\d+(\.\d{1,2})?$/.test(am)) return fail();
+      render({
+        c: (q.get("c") || "₹").slice(0, 4), payee: q.get("pn") || "", note: q.get("tn") || "", upi: q.get("pa") || "",
+        amount: Number(am),
+        lines: q.getAll("i").map(function (raw) {
+          var cut = raw.lastIndexOf("|");
+          return cut > 0 ? [raw.slice(0, cut), Number(raw.slice(cut + 1))] : [raw, NaN];
+        })
       });
     })();
   </script>
