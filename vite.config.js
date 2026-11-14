@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: "autoUpdate",
+        registerType: "prompt", // src/UpdatePrompt.jsx asks before switching to a new version
         includeAssets: ["favicon.ico", "apple-touch-icon-180x180.png", "logo.svg", "pizza.svg"],
         manifest: {
           name: "SplitEasy",
