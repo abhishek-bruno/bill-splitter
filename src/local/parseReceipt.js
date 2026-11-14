@@ -7,12 +7,13 @@ const MONEY = /(?:^|\s)(-?\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?|-?\d+(?:\.\d{1,2})?
 const CURRENCY_TOKENS = [[/₹|\brs\.?\b|\binr\b/i, "₹"], [/\$|\busd\b/i, "$"], [/€|\beur\b/i, "€"], [/£|\bgbp\b/i, "£"]];
 
 // Row kinds by keyword (checked in this order)
-const IS_NOISE = /(?:^|[^a-z])(gstin|gst\s*no|fssai|cin|pan\b|phone|ph\.?|mob(ile)?|tel|email|www\.|\.com|date|time|bill\s*no|invoice|inv\s*no|order\s*no|kot|table|tbl|cashier|server|steward|waiter|captain|guests?|pax|covers?|thank|visit\s*again|welcome|hsn|sac|qty|rate|amount\s*\(|particulars|description|item\s*name)(?![a-z])/i;
+const IS_NOISE = /(?:^|[^a-z])(gstin|gst\s*no|fssai|cin|pan\b|phone|ph\.?|mob(ile)?|tel|email|www\.|\.com|date|time|bill\s*no|invoice|inv\s*no|order\s*no|kot|table|tbl|cashier|server|steward|waiter|captain|guests?|pax|covers?|thank|visit\s*again|welcome|hsn|sac|qty|rate|amount\s*\(|particulars|description|item\s*name|dine\s*in|take\s*away|takeaway|parcel\s*no|token)(?![a-z])|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{1,2}:\d{2}/i;
 const IS_SUBTOTAL = /\b(sub\s*-?\s*total|food\s*total|item\s*total)\b/i;
 const IS_TOTAL = /\b(grand\s*total|net\s*(amount|amt|total|payable)|total\s*(amount|amt|payable|due)?|amount\s*payable|bill\s*amount|to\s*pay|balance\s*due)\b/i;
 const IS_ROUND = /\bround(ing|ed)?\s*(off)?\b|\br\/?o\b/i;
 const IS_DISCOUNT = /\b(discount|disc\.?|less|offer|coupon|promo|savings?)\b/i;
 const IS_CHARGE = /(^|[^a-z])(c\s*gst|s\s*gst|i\s*gst|u\s*gst|gst|vat|tax|cess|service\s*(charge|chg|tax)?|s\.?\s*c\.?|packing|packaging|parcel|delivery|tip|surcharge)(?![a-z])/i;
+const IS_ADDRESS = /(^|[^a-z])(add(ress)?|road|rd|street|st\.|sector|market|nagar|lane|floor|near|opp|cross|main|layout|colony|plot|shop\s*no|phase|block|dist|pin)(?![a-z])|\d{6}|,.*,/i;
 const IS_PAYMENT = /\b(cash|card|upi|paid|change|tender|visa|mastercard|paytm|gpay|phonepe)\b/i;
 
 const num = (s) => parseFloat(String(s).replace(/,/g, ""));
@@ -55,20 +56,43 @@ function toRows(items) {
   });
 }
 
+// Receipt OCR often glues the number columns together: "2194.00388.00" is qty 2 x 194.00 = 388.00,
+// "2 90180" is 2 x 90 = 180. Find a qty / rate / amount reading of the digits where qty x rate = amount.
+function solveColumns(tail) {
+  const str = tail.replace(/[\s,]/g, "");
+  if (!/^\d[\d.]*$/.test(str) || str.length > 20) return null;
+  const valid = (x) => /^\d+(\.\d{1,2})?$/.test(x) && !/^0\d/.test(x);
+  for (let qi = 1; qi <= 2; qi++) {
+    const qStr = str.slice(0, qi), qty = +qStr;
+    if (!/^\d+$/.test(qStr) || qty < 1 || qty > 99) continue;
+    for (let ri = qi + 1; ri < str.length; ri++) {
+      const rStr = str.slice(qi, ri), aStr = str.slice(ri);
+      if (!valid(rStr) || !valid(aStr)) continue;
+      const rate = +rStr, amount = +aStr;
+      if (rate > 0 && amount > 0 && Math.abs(qty * rate - amount) <= Math.max(0.05, amount * 0.005)) return { qty, rate, amount };
+    }
+  }
+  return null;
+}
+
 // Split a row into its label and trailing amount (if any)
 function splitAmount(text) {
   const t = text.replace(/[₹$€£]|\brs\.?|\binr\b/gi, " ").replace(/\s+/g, " ").trim();
-  const m = t.match(MONEY);
+  // The trailing run of numbers, which must start after a space (so "Bill No:22" or "20:41" isn't a price)
+  const m = t.match(/(?:^|\s)(-?\d[\d.,\s]*\d|-?\d)\s*$/);
   if (!m) return { label: t, amount: null };
-  const raw = m[1];
-  const digits = raw.replace(/[^0-9]/g, "");
-  if (digits.length > 7) return { label: t, amount: null }; // phone numbers, bill numbers
-  return { label: t.slice(0, m.index).trim(), amount: num(raw) };
+  const tail = m[1].trim();
+  const tokens = tail.match(/-?\d[\d,]*(?:\.\d{1,2})?/g) || [];
+  if (!tokens.length || tokens.some(x => x.replace(/[^0-9]/g, "").length > 7)) return { label: t, amount: null }; // phone or bill numbers
+  // Only a row with several numbers (or a glued run of them) can hold qty / rate / amount columns
+  const solved = tokens.length >= 2 ? solveColumns(tail) : null;
+  const amount = solved ? solved.amount : num(tokens[tokens.length - 1]);
+  return { label: t.slice(0, m.index).trim(), amount, qty: solved?.qty };
 }
 
 // "Paneer Tikka 2 180.00" -> "Paneer Tikka": drop trailing qty / rate columns and leading serial numbers
 function cleanName(label) {
-  let s = label.replace(/^\s*\d{1,3}[.)\-:]?\s+/, "");
+  let s = label.replace(/^\s*\d{1,3}(?:[.)\-:]\s*|\s+)/, "");
   s = s.replace(/(\s+(?:[x×@*]\s*)?\d[\d,]*(?:\.\d{1,2})?)+\s*$/i, "");
   s = s.replace(/[|:;_]+/g, " ").replace(/\s+/g, " ").trim();
   return /[a-z]{2}/i.test(s) && s === s.toUpperCase() ? titleCase(s) : s;
@@ -108,15 +132,25 @@ export function parseReceipt(ocrItems) {
   const currency = (CURRENCY_TOKENS.find(([re]) => re.test(allText)) || [null, ""])[1];
 
   const items = [], taxes = [];
-  let total = null, subtotal = null, round = 0, discount = 0, firstItemRow = -1, pendingName = "";
+  let total = null, subtotal = null, round = 0, discount = 0, firstItemRow = -1, pendingName = "", lastWasItem = false;
 
   rows.forEach((row, i) => {
     const { label, amount } = splitAmount(row.text);
     if (amount === null) {
-      // A name split over two lines: keep it for the next row that only has numbers
-      pendingName = IS_NOISE.test(row.text) || !/[a-z]{2}/i.test(row.text) ? "" : row.text;
+      const wordy = /[a-z]{2}/i.test(row.text) && !IS_NOISE.test(row.text) && !IS_TOTAL.test(row.text) && !IS_CHARGE.test(row.text);
+      // A long item name wraps onto the next line ("Kalmi Vada Dahi" / "Chaat"): add it to the item above
+      if (wordy && lastWasItem && row.text.split(" ").length <= 5) {
+        const last = items[items.length - 1];
+        last.name = cleanName(`${last.name} ${row.text}`);
+        lastWasItem = false; pendingName = "";
+        return;
+      }
+      // Otherwise it may be the first half of the next item's name
+      pendingName = wordy ? row.text : "";
+      lastWasItem = false;
       return;
     }
+    lastWasItem = false;
     const kindText = label || row.text;
     if (IS_PAYMENT.test(kindText) && !IS_TOTAL.test(kindText)) { pendingName = ""; return; }
     if (IS_SUBTOTAL.test(kindText)) subtotal = amount;
@@ -131,9 +165,10 @@ export function parseReceipt(ocrItems) {
       if (!name && pendingName) name = cleanName(pendingName);
       else if (pendingName && name && !/[a-z]{3}/i.test(name)) name = cleanName(`${pendingName} ${name}`);
       const looksLikeId = /^\d{5,}$/.test(String(amount)) && !/\.\d{1,2}\s*$/.test(row.text); // PIN codes etc.
-      if (name && amount > 0 && !looksLikeId) {
+      if (name && /[a-z]{2}/i.test(name) && amount > 0 && !looksLikeId) {
         if (firstItemRow < 0) firstItemRow = i;
         items.push({ name, amount });
+        lastWasItem = true;
       }
     }
     pendingName = "";
@@ -145,7 +180,7 @@ export function parseReceipt(ocrItems) {
 
   // Restaurant: the tallest text line above the first item, skipping addresses, phones and tax ids
   const headerRows = rows.slice(0, firstItemRow < 0 ? Math.min(4, rows.length) : firstItemRow)
-    .filter(r => /[a-z]{3}/i.test(r.text) && !IS_NOISE.test(r.text) && !MONEY.test(r.text));
+    .filter(r => /[a-z]{3}/i.test(r.text) && !IS_NOISE.test(r.text) && !IS_ADDRESS.test(r.text) && !MONEY.test(r.text));
   const restaurant = headerRows.length ? cleanName(headerRows.reduce((a, b) => (b.height > a.height * 1.15 ? b : a)).text) : "";
 
   // Check the result against the printed total
@@ -156,3 +191,4 @@ export function parseReceipt(ocrItems) {
 
   return { restaurant, currency, items, taxes, discount, subtotal, check };
 }
+export { toRows }; // for tests

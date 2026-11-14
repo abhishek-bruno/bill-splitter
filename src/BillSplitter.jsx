@@ -429,7 +429,8 @@ function LocalEngines({ config, onUse, onRemoved }) {
     setProgress({ id, value: 0 });
     try {
       await downloadEngine(id, { signal: ctrl.signal, onProgress: v => setProgress({ id, value: v }) });
-      await import("./local/basicScan.js"); // fetch the reader's code too, so it works offline
+      // Fetch the reader's code and start it once, so it's all cached and the first scan works offline
+      await (await import("./local/basicScan.js")).warmUp();
       setReady(r => ({ ...r, [id]: true }));
       setProgress(null);
       onUse(id); // they chose this reader; use it straight away
