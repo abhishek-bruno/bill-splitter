@@ -32,8 +32,8 @@ const ShareIcon = () => (
 
 // Install banner: one-tap install where the browser supports it, Add to Home Screen steps on iOS.
 // On the home page it floats as a dismissible toast below the header (its parent must be
-// positioned); in Settings (permanent) it sits inline and always shows.
-export default function InstallBanner({ permanent = false, toast = false }) {
+// positioned); in Settings (permanent) it sits inline and shows until the app is installed.
+export default function InstallBanner({ permanent = false, toast = false, title = null }) {
   const [, rerender] = useState(0);
   const [dismissed, setDismissed] = useState(recentlyDismissed);
 
@@ -44,12 +44,6 @@ export default function InstallBanner({ permanent = false, toast = false }) {
   }, []);
 
   const ios = isIOS();
-  if (permanent && isStandalone()) return (
-    <div style={{ fontSize: 14, color: "var(--muted)" }}>✓ SplitEasy is installed on this device.</div>
-  );
-  if (permanent && installedElsewhere && !deferredPrompt) return (
-    <div style={{ fontSize: 14, color: "var(--muted)" }}>✓ SplitEasy is already installed. Open it from your home screen or app list.</div>
-  );
   if (isStandalone() || installedElsewhere || (!permanent && dismissed)) return null;
   // Browsers without a one-tap prompt (Firefox, or Chrome before it offers one) only get the Settings hint
   if (!deferredPrompt && !ios && !permanent) return null;
@@ -68,7 +62,7 @@ export default function InstallBanner({ permanent = false, toast = false }) {
     if (outcome === "dismissed") dismiss(); else rerender(n => n + 1);
   };
 
-  return (
+  const banner = (
     <div role={toast ? "status" : undefined} className={toast ? "install-toast" : undefined} style={{
       display: "flex", alignItems: "center", gap: 12, border: "1px solid var(--border)", borderRadius: 14, padding: "12px 14px",
       background: toast ? "var(--surface)" : "var(--surface-2)",
@@ -92,4 +86,6 @@ export default function InstallBanner({ permanent = false, toast = false }) {
       {!permanent && <button onClick={dismiss} aria-label="Dismiss" style={{ background: "none", border: "none", color: "var(--subtle)", fontSize: 20, lineHeight: 1, cursor: "pointer", padding: "0 2px", flexShrink: 0 }}>×</button>}
     </div>
   );
+  // Settings passes its section title, so the whole section disappears once the app is installed
+  return title ? <>{title}<div style={{ marginBottom: 24 }}>{banner}</div></> : banner;
 }

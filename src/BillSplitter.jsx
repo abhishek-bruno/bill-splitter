@@ -452,7 +452,7 @@ function ApiKeySheet({ config, onSave, onClose, onRemove }) {
         ))}
       </div>
       {tab === "device" ? (
-        <LocalEngines config={config} onUse={(id) => onSave({ provider: `local-${id}` })} onRemoved={(id) => { if (config?.provider === `local-${id}`) onRemove?.(); }} />
+        <LocalEngines config={config} onUse={(id) => onSave({ provider: `local-${id}` })} />
       ) : savedKeys && (
         // Removing a key lives in Settings > Bill scanning
         <ApiKeySettings config={local ? null : config} savedKeys={savedKeys} onSave={save} onCancel={onClose} heading={false} />
@@ -461,13 +461,12 @@ function ApiKeySheet({ config, onSave, onClose, onRemove }) {
   );
 }
 
-// On-device readers: nothing downloads until the user agrees; then Use / Remove
-function LocalEngines({ config, onUse, onRemoved }) {
+// On-device readers: nothing downloads until the user agrees; then Use (removing is in Settings)
+function LocalEngines({ config, onUse }) {
   const [ready, setReady] = useState({}); // engine id -> downloaded
   const [asking, setAsking] = useState(null); // engine id awaiting consent
   const [progress, setProgress] = useState(null); // { id, value }
   const [error, setError] = useState("");
-  const [removing, setRemoving] = useState(null);
   const abortRef = useRef(null);
 
   useEffect(() => {
@@ -492,12 +491,6 @@ function LocalEngines({ config, onUse, onRemoved }) {
     }
   };
 
-  const remove = async (id) => {
-    setRemoving(null);
-    await removeEngine(id);
-    setReady(r => ({ ...r, [id]: false }));
-    onRemoved(id);
-  };
 
   return (
     <div>
@@ -535,10 +528,8 @@ function LocalEngines({ config, onUse, onRemoved }) {
                 </div>
               </div>
             ) : ready[id] ? (
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {!inUse && <button onClick={() => onUse(id)} style={{ ...outlineBtn("var(--accent)", "var(--accent)") }}>Use this</button>}
-                <button onClick={() => setRemoving(id)} style={{ ...linkBtn, fontSize: 12, color: "var(--subtle)", textDecoration: "underline", marginLeft: inUse ? 0 : 4 }}>Remove download</button>
-              </div>
+              // Downloaded: use it (removing a download lives in Settings > Bill scanning)
+              !inUse && <button onClick={() => onUse(id)} style={{ ...outlineBtn("var(--accent)", "var(--accent)"), width: "100%" }}>Use this</button>
             ) : (
               <button onClick={() => setAsking(id)} disabled={!!progress} style={{ ...outlineBtn("var(--accent)", "var(--accent)"), width: "100%" }}>Download · {e.sizeMB} MB</button>
             )}
@@ -546,15 +537,6 @@ function LocalEngines({ config, onUse, onRemoved }) {
         );
       })}
       {error && <div style={{ fontSize: 13, color: "var(--danger)", marginTop: 4 }}>{error}</div>}
-      {removing && (
-        <ConfirmModal
-          title={`Remove the ${ENGINES[removing].label} reader?`}
-          message={`Are you sure? This frees about ${ENGINES[removing].sizeMB} MB. You can download it again later.`}
-          confirmLabel="Remove"
-          onCancel={() => setRemoving(null)}
-          onConfirm={() => remove(removing)}
-        />
-      )}
     </div>
   );
 }
@@ -811,7 +793,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, fontSize: 12, color: "var(--subtle)", minHeight: 18 }}>
             {apiConfig ? (
               <>
-                {!canScan ? "You're offline. This reader needs internet." : <>Scanning with {readerLabel(apiConfig)}</>} ·
+                {!canScan ? "You're offline. This reader needs internet." : <>Scans with {readerLabel(apiConfig)}</>} ·
                 <button onClick={() => setKeySheet("change")} style={{ ...linkBtn, fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>Change</button>
               </>
             ) : apiConfig === null ? "Free On Device AI, or your own AI key" : null}
@@ -852,7 +834,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, maxWidth: 360, width: "100%" }}>
               <div style={{ fontSize: 14, color: "var(--danger)", background: "var(--danger-soft)", borderRadius: 10, padding: "10px 14px", textAlign: "center", width: "100%", boxSizing: "border-box" }}>{error}</div>
               <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, fontSize: 12, color: "var(--subtle)" }}>
-                Scanning with {readerLabel(apiConfig)} ·
+                Scans with {readerLabel(apiConfig)} ·
                 <button onClick={() => setKeySheet("change")} style={{ ...linkBtn, fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>Change</button>
               </div>
             </div>
@@ -1689,23 +1671,35 @@ function SettingsPage({ onClose, onKeyChanged, onEraseAll, savedNames, setSavedN
     flash("API key saved.");
   };
 
-  // On-device reader: delete its downloaded files and stop using it
-  const removeLocalReader = async () => {
-    const id = config.provider.slice(6);
-    if (!window.confirm(`Remove On Device AI? This frees about ${ENGINES[id]?.sizeMB} MB.`)) return;
-    await removeEngine(id);
+  // Everything bill scanning keeps on this device: downloaded readers and saved cloud keys
+  const [scanStore, setScanStore] = useState({ keys: {}, engines: {} });
+  const refreshScanStore = async (cfg) => {
+    const keys = await loadVisionKeys(cfg).catch(() => ({}));
+    const engines = Object.fromEntries(await Promise.all(Object.keys(ENGINES).map(async id => [id, await isEngineReady(id)])));
+    setScanStore({ keys, engines });
+  };
+  useEffect(() => { if (config !== undefined && !editing) refreshScanStore(config); }, [config, editing]);
+  // Removing the thing in use also stops using it
+  const stopIfActive = async (provider) => {
+    if (config?.provider !== provider) return;
     await deleteSecret("vision");
     setConfig(null);
     onKeyChanged();
-    flash("On Device AI removed.");
   };
 
-  const removeKey = async () => {
-    if (!window.confirm("Remove the saved API key from this device?")) return;
-    await forgetCloudKey(config.provider);
-    await deleteSecret("vision");
-    setConfig(null);
-    onKeyChanged();
+  const removeDownload = async (id) => {
+    if (!window.confirm(`Remove the On Device AI download (${ENGINES[id]?.label})? This frees about ${ENGINES[id]?.sizeMB} MB.`)) return;
+    await removeEngine(id);
+    await stopIfActive(`local-${id}`);
+    await refreshScanStore(config?.provider === `local-${id}` ? null : config);
+    flash("On Device AI download removed.");
+  };
+
+  const removeSavedKey = async (provider) => {
+    if (!window.confirm(`Remove the saved ${PROVIDERS[provider].label} key from this device?`)) return;
+    await forgetCloudKey(provider);
+    await stopIfActive(provider);
+    await refreshScanStore(config?.provider === provider ? null : config);
     flash("API key removed.");
   };
 
@@ -1725,10 +1719,7 @@ function SettingsPage({ onClose, onKeyChanged, onEraseAll, savedNames, setSavedN
         <div style={{ fontSize: 13, color: "var(--success-text)", background: "var(--success-soft)", border: "1px solid var(--success-border)", borderRadius: 8, padding: "8px 14px", marginBottom: 16 }}><CheckIcon size={13} /> {notice}</div>
       )}
 
-      <div style={sectionTitle}>Install app</div>
-      <div style={{ marginBottom: 24 }}>
-        <InstallBanner permanent />
-      </div>
+      <InstallBanner permanent title={<div style={sectionTitle}>Install app</div>} />
 
       <div style={sectionTitle}>Appearance</div>
       <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
@@ -1750,46 +1741,39 @@ function SettingsPage({ onClose, onKeyChanged, onEraseAll, savedNames, setSavedN
       <div style={sectionTitle}>Bill scanning</div>
       <div style={card}>
         {editing && <ApiKeySheet config={config} onSave={saveKey} onClose={() => setEditing(false)} />}
-        {config === undefined ? null : isLocalProvider(config?.provider) ? (
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 6 }}>
-              <span style={{ color: "var(--muted)" }}>Reader</span>
-              <span style={{ fontWeight: 600 }}>On Device AI · {ENGINES[config.provider.slice(6)]?.label}</span>
+        {config === undefined ? null : (() => {
+          const downloads = Object.keys(ENGINES).filter(id => scanStore.engines[id]);
+          const keys = Object.keys(scanStore.keys).filter(id => PROVIDERS[id]);
+          const subhead = { fontSize: 12, fontWeight: 600, color: "var(--subtle)", textTransform: "uppercase", letterSpacing: 0.4, margin: "14px 0 4px" };
+          const itemRow = (key, label, detail, onRemove) => (
+            <div key={key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid var(--divider)" }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
+                <span style={{ fontWeight: 600 }}>{label}</span>
+                <span style={{ color: "var(--muted)", marginLeft: 6, fontFamily: detail.startsWith("About") ? "inherit" : "ui-monospace, monospace", fontSize: 13 }}>{detail}</span>
+              </span>
+              <button onClick={onRemove} style={{ ...outlineBtn("var(--danger)", "var(--danger-border)"), flex: "none", padding: "6px 12px", fontSize: 13 }}>Remove</button>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 14 }}>
-              <span style={{ color: "var(--muted)" }}>Storage</span>
-              <span style={{ fontWeight: 600 }}>About {ENGINES[config.provider.slice(6)]?.sizeMB} MB</span>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setEditing(true)} style={outlineBtn()}>Change</button>
-              <button onClick={removeLocalReader} style={outlineBtn("var(--danger)", "var(--danger-border)")}>Remove</button>
-            </div>
-          </>
-        ) : config ? (
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 6 }}>
-              <span style={{ color: "var(--muted)" }}>Provider</span>
-              <span style={{ fontWeight: 600 }}>{PROVIDERS[config.provider].label}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 6 }}>
-              <span style={{ color: "var(--muted)" }}>Model</span>
-              <span style={{ fontWeight: 600 }}>{config.model}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 14 }}>
-              <span style={{ color: "var(--muted)" }}>Key</span>
-              <span style={{ fontWeight: 600, fontFamily: "ui-monospace, monospace" }}>{maskKey(config.apiKey)}</span>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setEditing(true)} style={outlineBtn()}>Change</button>
-              <button onClick={removeKey} style={outlineBtn("var(--danger)", "var(--danger-border)")}>Remove key</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize: 14, color: "var(--muted)", marginBottom: 12 }}>Use On Device AI or add an AI key to scan bill photos.</div>
-            <button onClick={() => setEditing(true)} style={{ ...outlineBtn("var(--accent)", "var(--accent)"), width: "100%" }}>Set up scanning</button>
-          </>
-        )}
+          );
+          return (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
+                  <span style={{ color: "var(--muted)" }}>In use</span>
+                  <span style={{ fontWeight: 600, marginLeft: 8 }}>{config ? readerLabel(config) : "Not set up"}</span>
+                </span>
+                <button onClick={() => setEditing(true)} style={{ ...outlineBtn(config ? "var(--text-2)" : "var(--accent)", config ? "var(--border)" : "var(--accent)"), flex: "none", padding: "6px 14px", fontSize: 13 }}>{config ? "Change" : "Set up"}</button>
+              </div>
+              {downloads.length > 0 && <>
+                <div style={subhead}>On Device AI</div>
+                {downloads.map(id => itemRow(id, ENGINES[id].label, `About ${ENGINES[id].sizeMB} MB`, () => removeDownload(id)))}
+              </>}
+              {keys.length > 0 && <>
+                <div style={subhead}>Saved AI keys</div>
+                {keys.map(id => itemRow(id, PROVIDERS[id].label, maskKey(scanStore.keys[id].apiKey), () => removeSavedKey(id)))}
+              </>}
+            </>
+          );
+        })()}
       </div>
 
       <div id="saved-people" style={{ ...sectionTitle, scrollMarginTop: 16 }}>Saved people</div>
