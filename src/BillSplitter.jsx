@@ -522,6 +522,35 @@ const homeBtn = (primary) => ({
 const cardBtn = { display: "inline-flex", alignItems: "center", gap: 5, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" };
 
 // How bills are read, as a bottom sheet (scan flow and Settings): on this device, or a cloud AI with your key
+// Swipe left/right on a tabbed area to move between its tabs. Mostly-vertical moves (scrolling), short moves
+// (taps, long-presses) and drags that start in a text field are ignored. dir (+1/-1) drives the slide-in.
+function useSwipeTabs(tabs, tab, setTab) {
+  const start = useRef(null);
+  const [dir, setDir] = useState(0);
+  const select = (next) => {
+    const d = Math.sign(tabs.indexOf(next) - tabs.indexOf(tab));
+    if (!d) return;
+    setDir(d);
+    setTab(next);
+  };
+  const handlers = {
+    onTouchStart: (e) => {
+      start.current = e.target.closest("input, textarea, select") ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    },
+    onTouchEnd: (e) => {
+      const s0 = start.current;
+      start.current = null;
+      if (!s0) return;
+      const dx = e.changedTouches[0].clientX - s0.x, dy = e.changedTouches[0].clientY - s0.y;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      const next = tabs[tabs.indexOf(tab) + (dx < 0 ? 1 : -1)];
+      if (next) select(next);
+    }
+  };
+  const slide = dir > 0 ? "tab-in-right" : dir < 0 ? "tab-in-left" : undefined;
+  return { select, handlers, slide };
+}
+
 function ApiKeySheet({ config, onSave, onClose, onRemove }) {
   const local = isLocalProvider(config?.provider);
   const [savedKeys, setSavedKeys] = useState(null);
@@ -530,23 +559,28 @@ function ApiKeySheet({ config, onSave, onClose, onRemove }) {
   const save = async (cfg) => { await rememberCloudKey(cfg); onSave(cfg); };
   // New users start on the free on-device tab; people with a cloud key start on theirs
   const [tab, setTab] = useState(config && !local ? "cloud" : "device");
+  const swipe = useSwipeTabs(["device", "cloud"], tab, setTab);
   return (
     <Sheet title="How to read bills" onClose={onClose}>
+      <div {...swipe.handlers}>
       <div role="tablist" style={{ display: "flex", gap: 4, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, marginBottom: 16 }}>
         {[["device", "On Device AI"], ["cloud", "Cloud AI"]].map(([id, label]) => (
-          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} style={{
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => swipe.select(id)} style={{
             flex: 1, border: "none", borderRadius: 8, padding: "8px", fontSize: 13, fontWeight: 600, cursor: "pointer",
             background: tab === id ? "var(--surface)" : "transparent", color: tab === id ? "var(--accent)" : "var(--muted)",
             boxShadow: tab === id ? "0 1px 3px #0001" : "none"
           }}>{label}</button>
         ))}
       </div>
-      {tab === "device" ? (
-        <LocalEngines config={config} onUse={(id) => onSave({ provider: `local-${id}` })} />
-      ) : savedKeys && (
-        // Removing a key lives in Settings > Bill scanning
-        <ApiKeySettings config={local ? null : config} savedKeys={savedKeys} onSave={save} onCancel={onClose} heading={false} />
-      )}
+      <div key={tab} className={swipe.slide}>
+        {tab === "device" ? (
+          <LocalEngines config={config} onUse={(id) => onSave({ provider: `local-${id}` })} />
+        ) : savedKeys && (
+          // Removing a key lives in Settings > Bill scanning
+          <ApiKeySettings config={local ? null : config} savedKeys={savedKeys} onSave={save} onCancel={onClose} heading={false} />
+        )}
+      </div>
+      </div>
     </Sheet>
   );
 }
@@ -1693,6 +1727,8 @@ function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, o
     const p = press.current;
     if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) clearTimeout(p.timer);
   };
+  const swipe = useSwipeTabs(["splits", "requests"], tab, setTab);
+  const canSwipe = requests.length > 0 || tab === "requests";
   const tap = (id) => {
     if (press.current?.fired) { press.current.fired = false; return; } // the long-press already handled it
     if (selecting) toggle(id);
@@ -1720,7 +1756,7 @@ function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, o
   const tabs = (requests.length > 0 || tab === "requests") && (
     <div style={{ display: "flex", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, marginBottom: 14 }}>
       {[["splits", "My splits"], ["requests", "Requests"]].map(([id, label]) => (
-        <button key={id} onClick={() => setTab(id)} aria-pressed={tab === id} style={{
+        <button key={id} onClick={() => swipe.select(id)} aria-pressed={tab === id} style={{
           flex: 1, border: "none", borderRadius: 8, padding: "7px 0", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
           background: tab === id ? "var(--surface)" : "transparent", color: tab === id ? "var(--accent)" : "var(--muted)",
           boxShadow: tab === id ? "0 1px 3px #0001" : "none"
@@ -1729,8 +1765,9 @@ function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, o
     </div>
   );
   if (tab === "requests") return (
-    <div className="fill">
+    <div className="fill" {...(canSwipe && swipe.handlers)}>
       {tabs}
+      <div key="requests" className={swipe.slide}>
       {requests.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 14, padding: "32px 0" }}>
           Payment links you open are saved here.
@@ -1768,11 +1805,13 @@ function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, o
           </button>
         ))}
       </div>
+      </div>
     </div>
   );
   return (
-    <div className="fill">
+    <div className="fill" {...(canSwipe && swipe.handlers)}>
       {tabs}
+      <div key="splits" className={swipe.slide}>
       {history.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 14, padding: "32px 0" }}>
           Splits are saved here automatically when you reach the summary.
@@ -1813,6 +1852,7 @@ function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, o
             </button>
           );
         })}
+      </div>
       </div>
     </div>
   );
