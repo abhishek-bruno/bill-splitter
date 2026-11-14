@@ -98,7 +98,12 @@ html { scroll-padding-top: 150px; scroll-padding-bottom: 96px; }
 .hero-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 14px; }
 .hero-chip {
   display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px;
-  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); font-size: 12px; font-weight: 600; }
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); font-size: 12px; font-weight: 600;
+  font-family: inherit; cursor: pointer; transition: border-color .15s; }
+.hero-chip:active { border-color: var(--accent-muted); }
+.promise-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.promise-track::-webkit-scrollbar { display: none; }
+.promise-slide { flex: 0 0 100%; scroll-snap-align: start; box-sizing: border-box; padding: 0 4px; }
 .hero-chip svg { color: var(--accent); }
 @keyframes hero-bill-in { from { opacity: 0; transform: translateY(8px) rotate(-9deg); } }
 @keyframes hero-pop { from { opacity: 0; transform: scale(.7); } }

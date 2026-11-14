@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex" />
   <title>Your share of the bill</title>
+  <script>
+    // Same theme as the app (saved in its settings)
+    try {
+      var t = (JSON.parse(localStorage.getItem("spliteasy:v1")) || {}).theme;
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  </script>
   <!-- Link preview card in chat apps. %PUBLIC_URL% is filled in at build time (vite.config.js) because
        crawlers need an absolute image URL. The split itself is in the #hash, which crawlers never see. -->
   <meta property="og:site_name" content="SplitEasy" />
@@ -17,11 +24,13 @@
   <meta name="twitter:card" content="summary_large_image" />
   <style>
     :root { --bg: #f3f4f6; --card: #fff; --text: #111; --muted: #6b7280; --accent: #6366f1; --line: #e5e7eb; }
+    /* Dark when the system asks (unless light was picked in the app), or when dark was picked */
     @media (prefers-color-scheme: dark) {
-      :root { --bg: #111318; --card: #1c1f26; --text: #f3f4f6; --muted: #9ca3af; --line: #2d313a; }
+      :root:not([data-theme="light"]) { --bg: #111318; --card: #1c1f26; --text: #f3f4f6; --muted: #9ca3af; --line: #2d313a; }
     }
+    :root[data-theme="dark"] { --bg: #111318; --card: #1c1f26; --text: #f3f4f6; --muted: #9ca3af; --line: #2d313a; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px;
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 0 16px 16px;
       background: var(--bg); color: var(--text); font-family: -apple-system, "Inter", system-ui, sans-serif; }
     .card { width: 100%; max-width: 380px; background: var(--card); border-radius: 20px; padding: 28px 24px; text-align: center;
       box-shadow: 0 4px 32px #0001; }
@@ -39,9 +48,6 @@
     .items li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
     .items li span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
     .hint { color: var(--muted); font-size: 13px; margin: 0; }
-    .footer { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; }
-    .footer a { color: var(--accent); font-weight: 600; text-decoration: none; }
-    .footer img { width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; }
     .gpay { background: #1a73e8; margin-bottom: 10px; }
     .pay.small { display: inline-block; font-size: 13px; padding: 6px 12px; border-radius: 8px; margin-top: 8px; }
     .toggle { width: 100%; margin-top: 16px; font-weight: 600; font-size: 14px; color: var(--accent); }
@@ -54,10 +60,42 @@
     .person .tag { font-weight: 500; font-size: 12px; color: var(--muted); margin-left: 6px; }
     .person .tag.ok { color: #16a34a; }
     .person .lines { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    /* App header, as in SplitEasy: logo and name (opens the app), and a link to saved requests */
+    .top { width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between;
+      padding: calc(14px + env(safe-area-inset-top)) 8px 12px; }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; color: var(--text); text-decoration: none; }
+    .brand img { width: 28px; height: 28px; }
+    .icons { display: flex; gap: 2px; }
+    .top .icon { display: flex; padding: 6px; border: none; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+    .card { margin: auto 0; }
+    .icon .sun { display: none; }
+    :root[data-theme="dark"] .icon .sun { display: inline; }
+    :root[data-theme="dark"] .icon .moon { display: none; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]) .icon .sun { display: inline; }
+      :root:not([data-theme]) .icon .moon { display: none; }
+    }
     [hidden] { display: none !important; }
   </style>
 </head>
 <body>
+  <header class="top">
+    <a class="brand" href="./"><img src="pizza.svg" alt="" />SplitEasy</a>
+    <div class="icons">
+      <button class="icon" id="theme" type="button" aria-label="Switch theme" title="Switch theme">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path class="moon" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          <g class="sun"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></g>
+        </svg>
+      </button>
+      <a class="icon" href="./?tab=requests#/history" aria-label="Saved requests" title="Saved requests">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+      </a>
+      <a class="icon" href="./#/settings" aria-label="Settings" title="Settings">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+      </a>
+    </div>
+  </header>
   <main class="card" id="card">
     <div class="label" id="label">Payment request</div>
     <div class="amount" id="amount"></div>
@@ -74,9 +112,6 @@
     <button class="toggle" id="toggle" type="button" hidden>View full split</button>
     <div class="split" id="split" hidden></div>
   </main>
-  <footer class="footer">
-    <a href="./"><img src="logo.svg" alt="" />SplitEasy</a> · split bills with friends
-  </footer>
   <script>
     (function () {
       var UPI = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/;
@@ -257,13 +292,39 @@
       // Changing only the hash keeps the same document, so re-run from scratch for the new link
       window.addEventListener("hashchange", function () { location.reload(); });
 
+      // Theme switch, as in the app's header: flips light/dark and saves the choice for the app too
+      $("theme").addEventListener("click", function () {
+        var root = document.documentElement, cur = root.getAttribute("data-theme");
+        var dark = cur ? cur === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+        var next = dark ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        try {
+          var saved = JSON.parse(localStorage.getItem("spliteasy:v1")) || {};
+          saved.theme = next;
+          localStorage.setItem("spliteasy:v1", JSON.stringify(saved));
+        } catch (e) { /* storage unavailable */ }
+      });
+
+      // Every opened request is kept on this device, so it can be found again in the app (History > Requests)
+      function remember(hash, r) {
+        try {
+          var key = "spliteasy:requests";
+          var list = JSON.parse(localStorage.getItem(key) || "[]").filter(function (x) { return x.id !== hash; });
+          r.id = hash; r.savedAt = Date.now();
+          list.unshift(r);
+          localStorage.setItem(key, JSON.stringify(list.slice(0, 50)));
+        } catch (e) { /* storage unavailable */ }
+      }
+
       var hash = location.hash.slice(1);
       if (hash) {
         try {
           var s = unpack(hash);
           var everyone = shares(s);
+          var billTotal = everyone.reduce(function (t, p) { return t + p.total; }, 0);
           if (s.me === -1) {
             renderGroup({ c: s.c, payee: s.payee, note: s.note, upi: s.upi, everyone: everyone });
+            remember(hash, { title: s.note || "Bill split", c: s.c, amount: Math.round(billTotal * 100) / 100, group: true, payee: everyone[0].name });
             return;
           }
           var mine = everyone[s.me];
@@ -272,6 +333,7 @@
             c: s.c, payee: s.payee, note: s.note, upi: s.upi, me: s.me, who: mine.name,
             amount: Math.round(mine.total * 100) / 100, lines: mine.lines, everyone: everyone
           });
+          remember(hash, { title: s.note || "Bill split", c: s.c, amount: Math.round(mine.total * 100) / 100, who: mine.name, payee: s.payee });
         } catch (e) { console.error(e); fail(); }
         return;
       }

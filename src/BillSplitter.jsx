@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { PROVIDERS, parseBillImage, upgradeModel, cleanApiKey, isValidApiKey, isLocalProvider } from "./vision.js";
 import { ENGINES, isEngineReady, downloadEngine, removeEngine } from "./local/models.js";
@@ -166,16 +166,30 @@ const ResetButton = ({ onReset, hasData }) => (
 // Home page promises: small icon chips under the headline; icons are 24x24 stroke paths
 const FEATURES = [
   { title: "Fully local", // cloud with a slash
+    points: [
+      "Your splits, history and saved people stay in this browser. There's no server and no tracking.",
+      "Works offline once installed.",
+      "On Device AI reads bills on your phone. With Cloud AI, only the bill photo goes to the provider you pick."
+    ],
     icon: <><path d="M2 2l20 20" /><path d="M5.8 5.8A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.3-.2" /><path d="M21.5 16.5A4.5 4.5 0 0 0 17.5 10h-1.8A7 7 0 0 0 10 5.1" /></> },
   { title: "No sign-up", // person with a cross
+    points: [
+      "Open the app and start splitting. No account, email or phone number.",
+      "Friends don't need the app. They get a link with their share and a UPI button."
+    ],
     icon: <><circle cx="9" cy="7" r="4" /><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" /><path d="M17 8l5 5M22 8l-5 5" /></> },
   { title: "Free", // gift box
+    points: [
+      "No ads, no subscription, no limits.",
+      "On Device AI scanning is free. Cloud AI uses your own key, and Google Gemini has a free tier."
+    ],
     icon: <><rect x="3" y="8" width="18" height="4" rx="1" /><path d="M12 8v13" /><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" /><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5" /></> }
 ];
 
 // Home intro: a little drawing of what the app does (a bill shared by three friends), the headline,
 // and the promises as chips. Styles in index.css (.hero-*)
 function HomeHero() {
+  const [open, setOpen] = useState(null); // index of the promise the sheet opens on
   return (
     <div className="hero">
       <div className="hero-art" aria-hidden="true">
@@ -197,13 +211,53 @@ function HomeHero() {
       <div className="hero-title">Split any bill by item in seconds</div>
       <div className="hero-chips">
         {FEATURES.map(f => (
-          <span key={f.title} className="hero-chip">
+          <button key={f.title} type="button" className="hero-chip" onClick={() => setOpen(FEATURES.indexOf(f))}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{f.icon}</svg>
             {f.title}
-          </span>
+          </button>
         ))}
       </div>
+      {open !== null && <PromiseSheet start={open} onClose={() => setOpen(null)} />}
     </div>
+  );
+}
+
+// The three promises as a swipeable carousel (native scroll snapping), opened on the chip that was tapped
+function PromiseSheet({ start, onClose }) {
+  const track = useRef(null);
+  const [index, setIndex] = useState(start);
+  useLayoutEffect(() => { const t = track.current; if (t) t.scrollLeft = start * t.clientWidth; }, [start]);
+  const onScroll = () => { const t = track.current; setIndex(Math.round(t.scrollLeft / t.clientWidth)); };
+  const go = (i) => track.current?.scrollTo({ left: i * track.current.clientWidth, behavior: "smooth" });
+  return (
+    <Sheet title="Why SplitEasy" onClose={onClose}>
+      <div ref={track} onScroll={onScroll} className="promise-track">
+        {FEATURES.map(f => (
+          <div key={f.title} className="promise-slide">
+            <div style={{ width: 56, height: 56, borderRadius: 28, margin: "0 auto 12px", background: "var(--accent-soft)", color: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{f.icon}</svg>
+            </div>
+            <div style={{ fontWeight: 800, fontSize: 17, textAlign: "center", marginBottom: 14 }}>{f.title}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {f.points.map(t => (
+                <div key={t} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, lineHeight: 1.5, color: "var(--text-2)" }}>
+                  <span style={{ color: "var(--success)", marginTop: 2, flexShrink: 0 }}><CheckIcon size={15} /></span>
+                  <span>{t}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 16 }}>
+        {FEATURES.map((f, i) => (
+          <button key={f.title} onClick={() => go(i)} aria-label={f.title} aria-current={i === index} style={{
+            width: i === index ? 18 : 6, height: 6, borderRadius: 3, border: "none", padding: 0, cursor: "pointer",
+            background: i === index ? "var(--accent)" : "var(--border-strong)", transition: "width .2s, background .2s"
+          }} />
+        ))}
+      </div>
+    </Sheet>
   );
 }
 
@@ -1618,7 +1672,7 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
 
 // ── History ───────────────────────────────────────────────────────────────────
 // Long-press a split to start selecting; while selecting, taps toggle instead of opening
-function HistoryList({ history, onOpen, onClose, selected, setSelected }) {
+function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, onClose, selected, setSelected }) {
   const selecting = selected.length > 0;
   const press = useRef(null); // { timer, x, y, fired }
   const toggle = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -1638,10 +1692,66 @@ function HistoryList({ history, onOpen, onClose, selected, setSelected }) {
   };
   const tap = (id) => {
     if (press.current?.fired) { press.current.fired = false; return; } // the long-press already handled it
-    if (selecting) toggle(id); else onOpen(id);
+    if (selecting) toggle(id);
+    else if (tab === "requests") window.location.href = `pay.html#${id}`; // the pay page shows it, as when first opened
+    else onOpen(id);
   };
+  const rowProps = (id) => ({
+    onClick: () => tap(id),
+    onPointerDown: e => startPress(id, e), onPointerUp: cancelPress, onPointerLeave: cancelPress, onPointerMove: movePress,
+    onContextMenu: e => e.preventDefault(), "aria-pressed": selecting ? selected.includes(id) : undefined,
+    style: {
+      display: "flex", alignItems: "center", gap: 12, textAlign: "left", width: "100%",
+      border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px",
+      background: "var(--surface)", cursor: "pointer",
+      userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none"
+    }
+  });
+  const tick = (id) => selecting && (
+    <span aria-hidden="true" style={{
+      width: 22, height: 22, borderRadius: 11, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center",
+      border: `2px solid ${selected.includes(id) ? "var(--accent)" : "var(--border-strong)"}`, background: selected.includes(id) ? "var(--accent)" : "transparent", color: "#fff"
+    }}>{selected.includes(id) && <CheckIcon size={12} strokeWidth={3} />}</span>
+  );
+  // Splits / Requests switch, once there's a request to show
+  const tabs = (requests.length > 0 || tab === "requests") && (
+    <div style={{ display: "flex", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, marginBottom: 14 }}>
+      {[["splits", "My splits"], ["requests", "Requests"]].map(([id, label]) => (
+        <button key={id} onClick={() => setTab(id)} aria-pressed={tab === id} style={{
+          flex: 1, border: "none", borderRadius: 8, padding: "7px 0", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+          background: tab === id ? "var(--surface)" : "transparent", color: tab === id ? "var(--accent)" : "var(--muted)",
+          boxShadow: tab === id ? "0 1px 3px #0001" : "none"
+        }}>{label}</button>
+      ))}
+    </div>
+  );
+  if (tab === "requests") return (
+    <div className="fill">
+      {tabs}
+      {requests.length === 0 && (
+        <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 14, padding: "32px 0" }}>
+          Payment links you open are saved here.
+        </div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {requests.map(r => (
+          <button key={r.id} {...rowProps(r.id)}>
+            {tick(r.id)}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.group ? `Paid by ${r.payee}` : `To ${r.payee}`} · {new Date(r.savedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+              </div>
+            </div>
+            <div style={{ fontWeight: 700, color: "var(--text)", flexShrink: 0 }}>{r.c}{Number(r.amount).toFixed(2)}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
   return (
     <div className="fill">
+      {tabs}
       {history.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 14, padding: "32px 0" }}>
           Splits are saved here automatically when you reach the summary.
@@ -1967,6 +2077,7 @@ function useTheme(theme) {
 }
 
 const HISTORY_KEY = "spliteasy:history";
+const REQUESTS_KEY = "spliteasy:requests"; // payment requests opened on this device (written by pay.html)
 function useStoredState(storageKey, initial) {
   const [val, setVal] = useState(() => {
     try { return JSON.parse(localStorage.getItem(storageKey)) ?? initial; } catch { return initial; }
@@ -1974,6 +2085,13 @@ function useStoredState(storageKey, initial) {
   useEffect(() => {
     try { localStorage.setItem(storageKey, JSON.stringify(val)); } catch { /* storage unavailable */ }
   }, [storageKey, val]);
+  // Another tab (e.g. the pay page saving a request) changed it: take that value
+  useEffect(() => {
+    const onStorage = (e) => { if (e.key === storageKey) { try { setVal(JSON.parse(e.newValue) ?? initial); } catch { /* ignore */ } } };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
   return [val, setVal];
 }
 
@@ -2030,6 +2148,16 @@ export default function BillSplitter() {
   const isDark = theme === "dark" || (theme === "system" && systemDark);
   const [splitId, setSplitId] = usePersisted("splitId", null);
   const [history, setHistory] = useStoredState(HISTORY_KEY, []);
+  const [requests, setRequests] = useStoredState(REQUESTS_KEY, []);
+  // History has two lists: splits made here and requests received; the pay page links to ?tab=requests
+  const [historyTab, setHistoryTabRaw] = useState(() => {
+    const q = new URLSearchParams(location.search);
+    if (!q.has("tab")) return "splits";
+    const tab = q.get("tab") === "requests" ? "requests" : "splits";
+    q.delete("tab");
+    window.history.replaceState(window.history.state, "", location.pathname + (q.toString() ? `?${q}` : "") + location.hash);
+    return tab;
+  });
   const initialRoute = useRef(parseRoute(location.hash)).current;
   const [view, setView] = useState(initialRoute.view); // "split" | "settings" | "history"
   const [settingsFocus, setSettingsFocus] = useState(null); // section id to scroll to when Settings opens
@@ -2042,7 +2170,9 @@ export default function BillSplitter() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedHistory.length]);
+  const setHistoryTab = (t) => { setSelectedHistory([]); setHistoryTabRaw(t); };
   const deleteSelectedHistory = () => {
+    if (historyTab === "requests") { setRequests(prev => prev.filter(r => !selectedHistory.includes(r.id))); setSelectedHistory([]); return; }
     setHistory(prev => prev.filter(e => !selectedHistory.includes(e.id)));
     if (selectedHistory.includes(splitId)) resetSplit(); // otherwise the open summary would re-save it
     setSelectedHistory([]);
@@ -2070,7 +2200,8 @@ export default function BillSplitter() {
   };
 
   const eraseAll = () => {
-    try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(HISTORY_KEY); } catch { /* storage unavailable */ }
+    try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(HISTORY_KEY); localStorage.removeItem(REQUESTS_KEY); } catch { /* storage unavailable */ }
+    setRequests([]);
     clearScanPhoto();
     setSavedNames([]);
     setPayment(null);
@@ -2218,7 +2349,7 @@ export default function BillSplitter() {
               <HeaderIcon label="Delete selected" onClick={() => setConfirmDeleteSelected(true)}>
                 <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" />
               </HeaderIcon>
-            ) : view === "history" && !openEntryId && history.length > 0 && (
+            ) : view === "history" && !openEntryId && (historyTab === "requests" ? requests : history).length > 0 && (
               <HeaderIcon label="Clear all history" onClick={() => setConfirmClearHistory(true)}>
                 <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" />
               </HeaderIcon>
@@ -2264,7 +2395,7 @@ export default function BillSplitter() {
           )}
           {confirmDeleteSelected && (
             <ConfirmModal
-              title={`Delete ${selectedHistory.length} ${selectedHistory.length === 1 ? "split" : "splits"}?`}
+              title={`Delete ${selectedHistory.length} ${historyTab === "requests" ? "request" : "split"}${selectedHistory.length === 1 ? "" : "s"}?`}
               message="Are you sure? They will be removed from History."
               confirmLabel="Delete"
               onCancel={() => setConfirmDeleteSelected(false)}
@@ -2273,11 +2404,13 @@ export default function BillSplitter() {
           )}
           {confirmClearHistory && (
             <ConfirmModal
-              title="Clear all history?"
-              message={`Are you sure? All ${history.length} saved ${history.length === 1 ? "split" : "splits"} will be deleted.`}
+              title={historyTab === "requests" ? "Clear all requests?" : "Clear all history?"}
+              message={historyTab === "requests"
+                ? `Are you sure? All ${requests.length} saved ${requests.length === 1 ? "request" : "requests"} will be deleted.`
+                : `Are you sure? All ${history.length} saved ${history.length === 1 ? "split" : "splits"} will be deleted.`}
               confirmLabel="Clear"
               onCancel={() => setConfirmClearHistory(false)}
-              onConfirm={() => { setConfirmClearHistory(false); setHistory([]); setSplitId(null); }}
+              onConfirm={() => { setConfirmClearHistory(false); if (historyTab === "requests") setRequests([]); else { setHistory([]); setSplitId(null); } }}
             />
           )}
           {showSteps && <StepBar current={step} onJump={i => { if (i === 0) setBillMode("manual"); setStep(i); }} />}
@@ -2297,7 +2430,8 @@ export default function BillSplitter() {
                 onOpenSettings={() => setView("settings")}
               />
             ) : (
-              <HistoryList history={history} onOpen={setOpenEntryId} onClose={() => goBack(() => setView("split"))}
+              <HistoryList history={history} requests={requests} tab={historyTab} setTab={setHistoryTab}
+                onOpen={setOpenEntryId} onClose={() => goBack(() => setView("split"))}
                 selected={selectedHistory} setSelected={setSelectedHistory} />
             )}
           </div>
