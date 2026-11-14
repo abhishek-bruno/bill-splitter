@@ -464,7 +464,6 @@ function ApiKeySheet({ config, onSave, onClose, onRemove }) {
 // On-device readers: nothing downloads until the user agrees; then Use (removing is in Settings)
 function LocalEngines({ config, onUse }) {
   const [ready, setReady] = useState({}); // engine id -> downloaded
-  const [asking, setAsking] = useState(null); // engine id awaiting consent
   const [progress, setProgress] = useState(null); // { id, value }
   const [error, setError] = useState("");
   const abortRef = useRef(null);
@@ -474,7 +473,7 @@ function LocalEngines({ config, onUse }) {
   }, []);
 
   const start = async (id) => {
-    setAsking(null); setError("");
+    setError("");
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setProgress({ id, value: 0 });
@@ -516,22 +515,12 @@ function LocalEngines({ config, onUse }) {
                   <button onClick={() => abortRef.current?.abort()} style={{ ...linkBtn, fontSize: 12, color: "var(--muted)", textDecoration: "underline" }}>Cancel</button>
                 </div>
               </div>
-            ) : asking === id ? (
-              // Consent: what downloads, how big, from where, and that photos stay here
-              <div style={{ background: "var(--surface-2)", borderRadius: 8, padding: "10px 12px" }}>
-                <div style={{ fontSize: 13, lineHeight: 1.45, marginBottom: 10 }}>
-                  Download about <b>{e.sizeMB} MB</b> once? It comes from {e.source}. After that it works offline. Wi-Fi recommended.
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => setAsking(null)} style={outlineBtn()}>Not now</button>
-                  <button onClick={() => start(id)} style={{ ...outlineBtn("#fff", "var(--accent)"), background: "var(--accent)" }}>Download</button>
-                </div>
-              </div>
             ) : ready[id] ? (
               // Downloaded: use it (removing a download lives in Settings > Bill scanning)
               !inUse && <button onClick={() => onUse(id)} style={{ ...outlineBtn("var(--accent)", "var(--accent)"), width: "100%" }}>Use this</button>
             ) : (
-              <button onClick={() => setAsking(id)} disabled={!!progress} style={{ ...outlineBtn("var(--accent)", "var(--accent)"), width: "100%" }}>Download · {e.sizeMB} MB</button>
+              // Tapping Download (with the size on it) is the consent; nothing downloads before that
+              <button onClick={() => start(id)} disabled={!!progress} style={{ ...outlineBtn("#fff", "var(--accent)"), background: "var(--accent)", width: "100%" }}>Download · {e.sizeMB} MB</button>
             )}
           </div>
         );
