@@ -9,15 +9,13 @@ export const ORT_WASM_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT
 const PADDLE_BASE = "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/";
 
 const paddleModel = (name) => ({ name, url: `${PADDLE_BASE}${name}_onnx_infer.tar` });
-// Text detection + recognition models per level: mobile (small, fast) and server (larger, reads small or
-// faint print more accurately)
+// Text detection + recognition models (mobile: small and fast)
 const MOBILE = { det: paddleModel("PP-OCRv5_mobile_det"), rec: paddleModel("PP-OCRv5_mobile_rec") };
-const SERVER = { det: paddleModel("PP-OCRv5_server_det"), rec: paddleModel("PP-OCRv5_server_rec") };
 // ONNX Runtime's WebAssembly build (single-threaded works without special server headers)
 // (the SDK's build of the runtime loads the jsep variant, which covers both WebAssembly and WebGPU)
 const ORT_FILES = ["ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"].map(f => ORT_WASM_BASE + f);
 
-// Shown to people as levels (Basic, Plus, ...); model names stay in code
+// Shown to people by level name (Basic); model names stay in code
 export const ENGINES = {
   basic: {
     label: "Basic",
@@ -27,15 +25,6 @@ export const ENGINES = {
     source: "PaddlePaddle's model server and the jsDelivr CDN",
     ocr: MOBILE,
     files: [MOBILE.det.url, MOBILE.rec.url, ...ORT_FILES]
-  },
-  plus: {
-    label: "Plus",
-    level: 2,
-    sizeMB: 180,
-    blurb: "Sharper text reading for small or faint print.",
-    source: "PaddlePaddle's model server and the jsDelivr CDN",
-    ocr: SERVER,
-    files: [SERVER.det.url, SERVER.rec.url, ...ORT_FILES]
   }
 };
 
