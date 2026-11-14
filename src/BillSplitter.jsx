@@ -522,33 +522,89 @@ const homeBtn = (primary) => ({
 const cardBtn = { display: "inline-flex", alignItems: "center", gap: 5, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text-2)", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" };
 
 // How bills are read, as a bottom sheet (scan flow and Settings): on this device, or a cloud AI with your key
-// Swipe left/right on a tabbed area to move between its tabs. Mostly-vertical moves (scrolling), short moves
-// (taps, long-presses) and drags that start in a text field are ignored. dir (+1/-1) drives the slide-in.
+// Native-feeling tab switching: the content follows a sideways drag (rubber band at the ends), then either
+// completes the switch (past ~30% of the width, or a flick) or springs back; the segment highlight tracks the
+// finger. Vertical drags scroll as usual (touch-action: pan-y); drags starting in a text field are ignored.
 function useSwipeTabs(tabs, tab, setTab) {
-  const start = useRef(null);
+  const contentRef = useRef(null), pillRef = useRef(null), drag = useRef(null);
   const [dir, setDir] = useState(0);
+  const idx = Math.max(0, tabs.indexOf(tab));
+  const setPill = (pos, animate) => {
+    const p = pillRef.current;
+    if (!p) return;
+    p.style.transition = animate ? "transform .28s cubic-bezier(.2, .8, .2, 1)" : "none";
+    p.style.transform = `translateX(${pos * 100}%)`;
+  };
+  useLayoutEffect(() => { setPill(idx, true); }, [idx]); // eslint-disable-line react-hooks/exhaustive-deps
   const select = (next) => {
-    const d = Math.sign(tabs.indexOf(next) - tabs.indexOf(tab));
+    const d = Math.sign(tabs.indexOf(next) - idx);
     if (!d) return;
     setDir(d);
     setTab(next);
   };
+  const reset = (el) => { if (el) { el.style.transition = ""; el.style.transform = ""; el.style.opacity = ""; } };
   const handlers = {
     onTouchStart: (e) => {
-      start.current = e.target.closest("input, textarea, select") ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      if (e.target.closest("input, textarea, select")) { drag.current = null; return; }
+      const t = e.touches[0];
+      drag.current = { x: t.clientX, y: t.clientY, t: Date.now(), axis: null, dx: 0 };
     },
-    onTouchEnd: (e) => {
-      const s0 = start.current;
-      start.current = null;
-      if (!s0) return;
-      const dx = e.changedTouches[0].clientX - s0.x, dy = e.changedTouches[0].clientY - s0.y;
-      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-      const next = tabs[tabs.indexOf(tab) + (dx < 0 ? 1 : -1)];
-      if (next) select(next);
+    onTouchMove: (e) => {
+      const d = drag.current, el = contentRef.current;
+      if (!d || !el) return;
+      const t = e.touches[0], dx = t.clientX - d.x, dy = t.clientY - d.y;
+      if (!d.axis) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        d.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      }
+      if (d.axis !== "x") return;
+      const hasNext = !!tabs[idx + (dx < 0 ? 1 : -1)];
+      d.dx = hasNext ? dx : dx * 0.25;
+      el.style.transition = "none";
+      el.style.transform = `translateX(${d.dx}px)`;
+      setPill(idx + (hasNext ? -d.dx / el.offsetWidth : 0), false);
+    },
+    onTouchEnd: () => {
+      const d = drag.current, el = contentRef.current;
+      drag.current = null;
+      if (!d || d.axis !== "x" || !el) return;
+      const w = el.offsetWidth, step = d.dx < 0 ? 1 : -1, next = tabs[idx + step];
+      const flick = Math.abs(d.dx) / Math.max(1, Date.now() - d.t) > 0.5;
+      el.style.transition = "transform .2s cubic-bezier(.2, .8, .2, 1), opacity .2s";
+      if (next && (Math.abs(d.dx) > w * 0.3 || (flick && Math.abs(d.dx) > 30))) {
+        el.style.transform = `translateX(${-step * w}px)`;
+        el.style.opacity = "0";
+        setPill(idx + step, true);
+        setTimeout(() => { reset(el); select(next); }, 170);
+      } else {
+        el.style.transform = "translateX(0)";
+        setPill(idx, true);
+        setTimeout(() => reset(el), 220);
+      }
     }
   };
+  handlers.onTouchCancel = handlers.onTouchEnd;
   const slide = dir > 0 ? "tab-in-right" : dir < 0 ? "tab-in-left" : undefined;
-  return { select, handlers, slide };
+  return { select, handlers, slide, contentRef, pillRef, idx };
+}
+
+// Segmented control whose highlight slides between options (and follows a swipe, via useSwipeTabs)
+function SegTabs({ options, value, swipe, role }) {
+  return (
+    <div role={role === "tab" ? "tablist" : undefined} style={{ position: "relative", display: "flex", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3 }}>
+      <div ref={swipe.pillRef} aria-hidden="true" style={{
+        position: "absolute", top: 3, bottom: 3, left: 3, width: `calc((100% - 6px) / ${options.length})`,
+        background: "var(--surface)", borderRadius: 8, boxShadow: "0 1px 3px #0001", transform: `translateX(${swipe.idx * 100}%)`
+      }} />
+      {options.map(([id, label]) => (
+        <button key={id} {...(role === "tab" ? { role: "tab", "aria-selected": value === id } : { "aria-pressed": value === id })}
+          onClick={() => swipe.select(id)} style={{
+            position: "relative", flex: 1, border: "none", borderRadius: 8, padding: "7px 0", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            fontFamily: "inherit", background: "transparent", color: value === id ? "var(--accent)" : "var(--muted)", transition: "color .2s"
+          }}>{label}</button>
+      ))}
+    </div>
+  );
 }
 
 function ApiKeySheet({ config, onSave, onClose, onRemove }) {
@@ -563,16 +619,10 @@ function ApiKeySheet({ config, onSave, onClose, onRemove }) {
   return (
     <Sheet title="How to read bills" onClose={onClose}>
       <div {...swipe.handlers}>
-      <div role="tablist" style={{ display: "flex", gap: 4, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, marginBottom: 16 }}>
-        {[["device", "On Device AI"], ["cloud", "Cloud AI"]].map(([id, label]) => (
-          <button key={id} role="tab" aria-selected={tab === id} onClick={() => swipe.select(id)} style={{
-            flex: 1, border: "none", borderRadius: 8, padding: "8px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-            background: tab === id ? "var(--surface)" : "transparent", color: tab === id ? "var(--accent)" : "var(--muted)",
-            boxShadow: tab === id ? "0 1px 3px #0001" : "none"
-          }}>{label}</button>
-        ))}
+      <div style={{ marginBottom: 16 }}>
+        <SegTabs options={[["device", "On Device AI"], ["cloud", "Cloud AI"]]} value={tab} swipe={swipe} role="tab" />
       </div>
-      <div key={tab} className={swipe.slide}>
+      <div key={tab} ref={swipe.contentRef} className={swipe.slide} style={{ touchAction: "pan-y" }}>
         {tab === "device" ? (
           <LocalEngines config={config} onUse={(id) => onSave({ provider: `local-${id}` })} />
         ) : savedKeys && (
@@ -1753,21 +1803,15 @@ function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, o
     }}>{selected.includes(id) && <CheckIcon size={12} strokeWidth={3} />}</span>
   );
   // Splits / Requests switch, once there's a request to show
-  const tabs = (requests.length > 0 || tab === "requests") && (
-    <div style={{ display: "flex", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, marginBottom: 14 }}>
-      {[["splits", "My splits"], ["requests", "Requests"]].map(([id, label]) => (
-        <button key={id} onClick={() => swipe.select(id)} aria-pressed={tab === id} style={{
-          flex: 1, border: "none", borderRadius: 8, padding: "7px 0", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
-          background: tab === id ? "var(--surface)" : "transparent", color: tab === id ? "var(--accent)" : "var(--muted)",
-          boxShadow: tab === id ? "0 1px 3px #0001" : "none"
-        }}>{label}</button>
-      ))}
+  const tabs = canSwipe && (
+    <div style={{ marginBottom: 14 }}>
+      <SegTabs options={[["splits", "My splits"], ["requests", "Requests"]]} value={tab} swipe={swipe} />
     </div>
   );
   if (tab === "requests") return (
     <div className="fill" {...(canSwipe && swipe.handlers)}>
       {tabs}
-      <div key="requests" className={swipe.slide}>
+      <div key="requests" ref={swipe.contentRef} className={swipe.slide} style={{ touchAction: "pan-y" }}>
       {requests.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 14, padding: "32px 0" }}>
           Payment links you open are saved here.
@@ -1811,7 +1855,7 @@ function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, o
   return (
     <div className="fill" {...(canSwipe && swipe.handlers)}>
       {tabs}
-      <div key="splits" className={swipe.slide}>
+      <div key="splits" ref={swipe.contentRef} className={swipe.slide} style={{ touchAction: "pan-y" }}>
       {history.length === 0 && (
         <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 14, padding: "32px 0" }}>
           Splits are saved here automatically when you reach the summary.

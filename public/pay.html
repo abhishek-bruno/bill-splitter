@@ -128,9 +128,14 @@
     .receipt::after { content: ""; position: absolute; left: 0; right: 0; bottom: -10px; height: 10px;
       background: linear-gradient(-45deg, transparent 7px, var(--card) 0) 0 0 / 14px 10px repeat-x, linear-gradient(45deg, transparent 7px, var(--card) 0) 0 0 / 14px 10px repeat-x; }
     .r-title { font-weight: 800; font-size: 18px; text-align: center; }
-    .r-tabs { display: flex; gap: 4px; background: var(--bg); border-radius: 10px; padding: 3px; margin: 12px 0 4px; }
-    .r-tabs button { flex: 1; border: none; border-radius: 8px; padding: 6px 0; font-size: 13px; font-weight: 600; color: var(--muted); }
-    .r-tabs button.on { background: var(--card); color: var(--accent); box-shadow: 0 1px 3px #0001; }
+    .r-tabs { position: relative; display: flex; background: var(--bg); border-radius: 10px; padding: 3px; margin: 12px 0 4px; }
+    .r-pill { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); background: var(--card); border-radius: 8px; box-shadow: 0 1px 3px #0001; }
+    .r-tabs button { position: relative; flex: 1; border: none; border-radius: 8px; padding: 6px 0; font-size: 13px; font-weight: 600; color: var(--muted); transition: color .2s; }
+    .r-tabs button.on { color: var(--accent); }
+    .r-scroll { touch-action: pan-y; }
+    @keyframes tab-r { from { opacity: 0; transform: translateX(30%); } }
+    @keyframes tab-l { from { opacity: 0; transform: translateX(-30%); } }
+    @media (prefers-reduced-motion: reduce) { .r-body { animation: none !important; } }
     .r-body > :first-child { border-top: 1.5px dashed var(--line); margin-top: 10px; }
     .bline { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; font-size: 14px; padding: 5px 0; }
     .bline:first-child { padding-top: 12px; }
@@ -442,7 +447,7 @@
           var n = qr.getModuleCount(), d = "";
           for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) d += "M" + (c + 4) + " " + (r + 4) + "h1v1h-1z";
           $("qr").innerHTML = '<svg viewBox="0 0 ' + (n + 8) + " " + (n + 8) + '" shape-rendering="crispEdges" role="img" aria-label="UPI payment QR code"><path fill="#000" d="' + d + '"/></svg>';
-          $("qrsheet").hidden = false;
+          openSheet("qrsheet");
         };
         if (window.qrcode) return draw();
         var sc = document.createElement("script");
@@ -450,8 +455,18 @@
         sc.onload = draw;
         document.head.appendChild(sc);
       }
-      // Sheets close with ×, a tap outside, or Escape
-      var closeSheets = function () { ["qrsheet", "billsheet"].forEach(function (id) { $(id).hidden = true; }); };
+      // Sheets close with ×, a tap outside, Escape, or Back: each open sheet adds a history entry, so Back closes
+      // just the sheet, and the other ways go back through that entry
+      var hideSheets = function () { ["qrsheet", "billsheet"].forEach(function (id) { $(id).hidden = true; }); };
+      var openSheet = function (id) {
+        $(id).hidden = false;
+        if (!(history.state && history.state.sheet)) history.pushState({ sheet: id }, "");
+      };
+      var closeSheets = function () {
+        if (history.state && history.state.sheet) history.back(); else hideSheets();
+      };
+      window.addEventListener("popstate", hideSheets);
+      if (history.state && history.state.sheet) history.replaceState(null, ""); // reloaded with a sheet open
       ["qrsheet", "billsheet"].forEach(function (id) {
         $(id).addEventListener("click", function (e) { if (e.target === $(id) || e.target.hasAttribute("data-close")) closeSheets(); });
       });
@@ -529,19 +544,76 @@
         rtop.appendChild(el("div", "r-title", v.note || "Bill split"));
         rtop.appendChild(el("div", "r-sub", v.everyone.length + " people \u00b7 paid by " + v.everyone[0].name));
         // Two views of the same receipt: the bill as printed, and who pays what
+        // Switch by tapping or swiping; the highlight slides, and the content follows the finger
         var tabs = el("div", "r-tabs"), bill = el("div", "r-body"), split = el("div", "r-body");
-        [["Bill", bill], ["Split", split]].forEach(function (t, k) {
-          var b = el("button", k === 0 ? "on" : null, t[0]);
+        var pill = el("span", "r-pill"), bodies = [bill, split], btns = [], cur = 0;
+        tabs.appendChild(pill);
+        var setPill = function (pos, animate) {
+          pill.style.transition = animate ? "transform .28s cubic-bezier(.2, .8, .2, 1)" : "none";
+          pill.style.transform = "translateX(" + pos * 100 + "%)";
+        };
+        var go = function (i) {
+          if (i === cur || i < 0 || i >= bodies.length) return setPill(cur, true);
+          var dir = i > cur ? 1 : -1;
+          cur = i;
+          btns.forEach(function (b, k) { b.className = k === i ? "on" : ""; });
+          bodies.forEach(function (b, k) { b.hidden = k !== i; });
+          var b = bodies[i];
+          b.style.animation = "none";
+          void b.offsetWidth; // restart the slide-in
+          b.style.animation = (dir > 0 ? "tab-r" : "tab-l") + " .22s cubic-bezier(.2, .8, .2, 1)";
+          setPill(i, true);
+        };
+        ["Bill", "Split"].forEach(function (label, k) {
+          var b = el("button", k === 0 ? "on" : null, label);
           b.type = "button";
-          b.addEventListener("click", function () {
-            [].forEach.call(tabs.children, function (x) { x.className = x === b ? "on" : ""; });
-            bill.hidden = t[1] !== bill;
-            split.hidden = t[1] !== split;
-          });
+          b.addEventListener("click", function () { go(k); });
+          btns.push(b);
           tabs.appendChild(b);
         });
         split.hidden = true;
         rtop.appendChild(tabs);
+        // Sideways drag on the content: follow it (rubber band at the ends), then switch or spring back
+        var g = null;
+        rscroll.addEventListener("touchstart", function (e) {
+          var t = e.touches[0];
+          g = { x: t.clientX, y: t.clientY, t: Date.now(), axis: null, dx: 0 };
+        }, { passive: true });
+        rscroll.addEventListener("touchmove", function (e) {
+          if (!g) return;
+          var t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y, body = bodies[cur];
+          if (!g.axis) {
+            if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+            g.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+          }
+          if (g.axis !== "x") return;
+          var has = !!bodies[cur + (dx < 0 ? 1 : -1)];
+          g.dx = has ? dx : dx * 0.25;
+          body.style.animation = "none";
+          body.style.transition = "none";
+          body.style.transform = "translateX(" + g.dx + "px)";
+          setPill(cur + (has ? -g.dx / body.offsetWidth : 0), false);
+        }, { passive: true });
+        var end = function () {
+          var d = g;
+          g = null;
+          if (!d || d.axis !== "x") return;
+          var body = bodies[cur], w = body.offsetWidth, step = d.dx < 0 ? 1 : -1;
+          var flick = Math.abs(d.dx) / Math.max(1, Date.now() - d.t) > 0.5;
+          body.style.transition = "transform .2s cubic-bezier(.2, .8, .2, 1), opacity .2s";
+          if (bodies[cur + step] && (Math.abs(d.dx) > w * 0.3 || (flick && Math.abs(d.dx) > 30))) {
+            body.style.transform = "translateX(" + (-step * w) + "px)";
+            body.style.opacity = "0";
+            setPill(cur + step, true);
+            setTimeout(function () { body.style.transition = body.style.transform = body.style.opacity = ""; go(cur + step); }, 170);
+          } else {
+            body.style.transform = "translateX(0)";
+            setPill(cur, true);
+            setTimeout(function () { body.style.transition = body.style.transform = ""; }, 220);
+          }
+        };
+        rscroll.addEventListener("touchend", end);
+        rscroll.addEventListener("touchcancel", end);
 
         // Bill: as printed. Items at full price, subtotal, charges
         var line = function (label, amount, cls) {
@@ -605,7 +677,7 @@
         full.hidden = !collapsed;
         $("people").hidden = !!collapsed;
         full.textContent = "View full bill";
-        full.onclick = function () { $("billsheet").hidden = false; var sc = $("billsheet").querySelector(".r-scroll"); if (sc) sc.scrollTop = 0; };
+        full.onclick = function () { openSheet("billsheet"); var sc = $("billsheet").querySelector(".r-scroll"); if (sc) sc.scrollTop = 0; };
       }
 
       // Changing only the hash keeps the same document, so re-run from scratch for the new link

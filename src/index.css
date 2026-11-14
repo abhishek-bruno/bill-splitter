@@ -138,8 +138,8 @@ html { scroll-padding-top: 150px; scroll-padding-bottom: 96px; }
 /* Switching tabs: the new tab slides in from the side it came from */
 .tab-in-right { animation: tab-in-right .22s var(--ease-out) both; }
 .tab-in-left { animation: tab-in-left .22s var(--ease-out) both; }
-@keyframes tab-in-right { from { opacity: 0; transform: translateX(24px); } }
-@keyframes tab-in-left { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes tab-in-right { from { opacity: 0; transform: translateX(30%); } }
+@keyframes tab-in-left { from { opacity: 0; transform: translateX(-30%); } }
 @media (prefers-reduced-motion: reduce) {
   .screen-in, .fade-in, .sheet-in, .dialog-in, .sheet-panel, .install-toast,
   .hero-bill, .hero-people span, .hero-title, .hero-chips { animation: none; }
