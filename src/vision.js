@@ -256,7 +256,7 @@ export const isLocalProvider = (provider) => typeof provider === "string" && pro
 async function scanOnDevice(file, provider) {
   const id = provider.slice("local-".length);
   const { isEngineReady } = await import("./local/models.js");
-  if (!(await isEngineReady(id))) throw new Error("The on-device reader isn't downloaded on this device. Download it again in settings.");
+  if (!(await isEngineReady(id))) throw new Error("On Device AI isn't downloaded on this device. Download it again in Settings.");
   const { scanBasic } = await import("./local/basicScan.js");
   const r = await scanBasic(file);
   // The app has no negative charges, so a discount is spread over the items in proportion

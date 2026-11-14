@@ -86,6 +86,6 @@ export async function removeEngine(id) {
 export async function cachedUrl(url) {
   const cache = await caches.open(MODEL_CACHE);
   const res = await cache.match(url);
-  if (!res) throw new Error("The on-device reader isn't fully downloaded. Download it again in settings.");
+  if (!res) throw new Error("On Device AI isn't fully downloaded. Download it again in Settings.");
   return URL.createObjectURL(await res.blob());
 }
