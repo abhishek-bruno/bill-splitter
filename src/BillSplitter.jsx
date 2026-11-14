@@ -1197,8 +1197,10 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button onClick={() => sharePayment(p)} style={{
                 flex: 2,
-                background: status[p.id] ? "var(--success)" : "var(--accent)",
-                color: "#fff", border: "none", borderRadius: 8, padding: "8px",
+                // Outlined like Show QR, so the footer keeps the only solid button; it turns green once shared
+                background: status[p.id] ? "var(--success-soft)" : "var(--surface)",
+                color: status[p.id] ? "var(--success-text)" : "var(--text-2)",
+                border: `1.5px solid ${status[p.id] ? "var(--success)" : "var(--border)"}`, borderRadius: 8, padding: "8px",
                 fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "background .2s",
                 display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
               }}>
@@ -1728,6 +1730,9 @@ export default function BillSplitter() {
     else { replaceNext.current = true; fallback(); }
   };
 
+  // The step indicator shows while building the split; the settle screen (step 3) is the result, so it's hidden there
+  const showSteps = view === "split" && step < 3;
+
   // Footer Back always goes to the previous step (not just the last screen visited), replacing the
   // current history entry so browser Back doesn't bounce forward again. People goes back to editing the bill.
   const prevStep = () => {
@@ -1765,7 +1770,7 @@ export default function BillSplitter() {
           padding: "calc(14px + env(safe-area-inset-top)) 24px 12px",
           borderBottom: `1px solid ${scrolled ? "var(--divider)" : "transparent"}`
         }}>
-          <div style={{ fontWeight: 800, fontSize: 20, color: "var(--text)", marginBottom: view === "split" ? 14 : 0, display: "flex", alignItems: "center", gap: 8, minHeight: 34 }}>
+          <div style={{ fontWeight: 800, fontSize: 20, color: "var(--text)", marginBottom: showSteps ? 14 : 0, display: "flex", alignItems: "center", gap: 8, minHeight: 34 }}>
             {/* History and Settings show their own name here instead of the app name */}
             <img src="pizza.svg" alt="" width="28" height="28" style={{ flexShrink: 0 }} /> {view === "history" ? (selectedHistory.length ? `${selectedHistory.length} selected` : "History") : view === "settings" ? "Settings" : "SplitEasy"}
             {/* Delete sits by the title, well away from × on the right */}
@@ -1826,7 +1831,7 @@ export default function BillSplitter() {
               onConfirm={() => { setConfirmClearHistory(false); setHistory([]); setSplitId(null); }}
             />
           )}
-          {view === "split" && <StepBar current={step} onJump={i => { if (i === 0) setBillMode("manual"); setStep(i); }} />}
+          {showSteps && <StepBar current={step} onJump={i => { if (i === 0) setBillMode("manual"); setStep(i); }} />}
           {/* home page only: floats just below the header */}
           {view === "split" && step === 0 && !billMode && <InstallBanner toast />}
         </div>
@@ -1906,7 +1911,8 @@ export default function BillSplitter() {
           <StickyFooter>
             <div style={{ display: "flex", gap: 8 }}>
             <FooterReset onReset={currentEntry ? deleteCurrentSplit : resetSplit} deletes={!!currentEntry} />
-            <button onClick={prevStep} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
+            {/* The settle screen is the result: Edit goes back into the steps (Assign, with the step indicator) */}
+            <button onClick={prevStep} style={footerBackBtn}><Icon d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" size={16} /> Edit</button>
             <button onClick={resetSplit} style={{
               flex: 2, border: "none", background: "var(--accent)",
               borderRadius: 10, padding: 12, fontWeight: 700, cursor: "pointer", fontSize: 15, color: "#fff"
