@@ -9,6 +9,15 @@ const COLORS = [
   "#6366f1","#f59e0b","#10b981","#ef4444","#8b5cf6","#ec4899","#14b8a6","#f97316"
 ];
 
+// Arrow pointing up-right, for links that go somewhere else (external sites, other screens)
+function ArrowUpRight({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M7 17 17 7" /><path d="M8 7h9v9" />
+    </svg>
+  );
+}
+
 function Avatar({ name, color, size = 32 }) {
   return (
     <div style={{
@@ -163,11 +172,15 @@ function ApiKeySettings({ config, onSave, onCancel }) {
   const [model, setModel] = useState(config?.model || PROVIDERS[config?.provider || "google"].defaultModel);
   const [saving, setSaving] = useState(false);
   const p = PROVIDERS[provider];
+  // A model not in the provider's list (typed earlier) opens straight in manual entry
+  const [manualModel, setManualModel] = useState(() => !p.models.some(m => m.id === model));
 
   const pick = (id) => {
     setProvider(id);
     setApiKey(id === config?.provider ? config.apiKey : "");
-    setModel(id === config?.provider ? config.model : PROVIDERS[id].defaultModel);
+    const next = id === config?.provider ? config.model : PROVIDERS[id].defaultModel;
+    setModel(next);
+    setManualModel(!PROVIDERS[id].models.some(m => m.id === next));
   };
 
   const cleanedKey = cleanApiKey(apiKey);
@@ -182,7 +195,7 @@ function ApiKeySettings({ config, onSave, onCancel }) {
   return (
     <div>
       <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)", marginBottom: 4 }}>Connect a vision API</div>
-      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>Use your own key to read bill photos. You pay the provider directly; a scan costs well under a cent.</div>
+      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>Use your own key to read bill photos.</div>
 
       <label style={labelStyle}>Provider</label>
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
@@ -207,10 +220,24 @@ function ApiKeySettings({ config, onSave, onCancel }) {
           This key has characters that aren't allowed. Copy it again from {p.label}.
         </div>
       )}
-      <a href={p.keyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--accent)", display: "inline-block", marginBottom: 14 }}>Get a {p.label} key ↗</a>
+      <a href={p.keyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: 3, marginBottom: 14 }}>Get {/^[AEIOU]/i.test(p.label) ? "an" : "a"} {p.label} key <ArrowUpRight size={12} /></a>
 
       <label style={labelStyle}>Model</label>
-      <input value={model} onChange={e => setModel(e.target.value)} placeholder={p.defaultModel} spellCheck={false} style={{ ...inputStyle, marginBottom: 14 }} />
+      <select
+        value={manualModel ? "__manual" : model}
+        onChange={e => {
+          if (e.target.value === "__manual") { setManualModel(true); return; }
+          setManualModel(false);
+          setModel(e.target.value);
+        }}
+        style={{ ...inputStyle, cursor: "pointer", marginBottom: manualModel ? 8 : 14 }}
+      >
+        {p.models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+        <option value="__manual">Enter manually…</option>
+      </select>
+      {manualModel && (
+        <input value={model} onChange={e => setModel(e.target.value)} placeholder={`Model ID, e.g. ${p.defaultModel}`} spellCheck={false} autoCapitalize="none" autoFocus style={{ ...inputStyle, marginBottom: 14 }} />
+      )}
 
       <div style={{ fontSize: 12, color: "var(--muted)", background: "var(--surface-2)", borderRadius: 8, padding: "10px 12px", marginBottom: 16, lineHeight: 1.5 }}>
         🔒 The key is encrypted and kept only on this device. It is sent only to {p.label} when you scan a bill.
@@ -662,9 +689,7 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames, onMana
           <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 4, fontSize: 12, color: "var(--subtle)" }}>
             <span style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Saved</span>
             <button onClick={onManageSaved} aria-label="Manage saved people" title="Manage" style={{ display: "inline-flex", background: "none", border: "none", padding: 4, color: "var(--accent)", cursor: "pointer" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M7 17 17 7" /><path d="M8 7h9v9" />
-              </svg>
+              <ArrowUpRight size={14} />
             </button>
           </div>
           <div style={{ background: "var(--surface)", border: "1px solid var(--divider)", borderRadius: 10, padding: "0 12px" }}>

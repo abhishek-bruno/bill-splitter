@@ -6,18 +6,35 @@ export const PROVIDERS = {
     label: "Google Gemini",
     // Alias that tracks Google's current Flash model, so retirements don't break scanning
     defaultModel: "gemini-flash-latest",
+    // Aliases that follow Google's newest model in each tier
+    models: [
+      { id: "gemini-flash-latest", label: "Gemini Flash (latest, free tier)" },
+      { id: "gemini-flash-lite-latest", label: "Gemini Flash-Lite (latest, free tier)" },
+      { id: "gemini-pro-latest", label: "Gemini Pro (latest, most capable)" }
+    ],
     keyUrl: "https://aistudio.google.com/apikey",
     keyHint: "AIza…"
   },
   anthropic: {
     label: "Anthropic Claude",
-    defaultModel: "claude-opus-5",
+    defaultModel: "claude-opus-5-5",
+    models: [
+      { id: "claude-opus-5-5", label: "Claude Opus 5.5 (most capable)" },
+      { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
+      { id: "claude-haiku-5-5", label: "Claude Haiku 5.5 (cheapest)" },
+      { id: "claude-opus-5", label: "Claude Opus 5 (previous)" }
+    ],
     keyUrl: "https://console.anthropic.com/settings/keys",
     keyHint: "sk-ant-…"
   },
   openai: {
     label: "OpenAI",
     defaultModel: "gpt-5-mini",
+    models: [
+      { id: "gpt-5-mini", label: "GPT-5 mini" },
+      { id: "gpt-5", label: "GPT-5 (most capable)" },
+      { id: "gpt-5-nano", label: "GPT-5 nano (cheapest)" }
+    ],
     keyUrl: "https://platform.openai.com/api-keys",
     keyHint: "sk-…"
   }
@@ -184,8 +201,8 @@ async function callOpenAI({ apiKey, model }, img) {
 async function callAnthropic({ apiKey, model }, img) {
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-  // Server-side refusal fallback is only offered on the top-tier models.
-  const fallback = /^claude-(opus-5|fable-5-1)$/.test(model)
+  // Server-side refusal fallback is offered on these models (not Haiku).
+  const fallback = /^claude-(opus-5|opus-5-5|sonnet-5-5|fable-5-1|fable-5-2)$/.test(model)
     ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" }
     : null;
   const params = {
