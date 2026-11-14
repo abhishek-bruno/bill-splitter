@@ -1113,11 +1113,21 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
                 <ChevronIcon up={open.bill} size={16} />
               </button>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-              <CopyAmount value={bill.total?.toFixed(2)} display={`${bill.currency}${bill.total?.toFixed(2)}`} label="bill total" style={{ fontSize: 30, fontWeight: 800, color: "#fff" }} />
-            </div>
-            <div style={{ fontSize: 13, opacity: 0.85 }}>
-              Paid by {totals[0]?.name} · {people.length} people
+            {/* Total and payer on the left, a compact group-share button on the right */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 2 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <CopyAmount value={bill.total?.toFixed(2)} display={`${bill.currency}${bill.total?.toFixed(2)}`} label="bill total" style={{ fontSize: 30, fontWeight: 800, color: "#fff" }} />
+                <div style={{ fontSize: 13, opacity: 0.85 }}>Paid by {totals[0]?.name} · {people.length} people</div>
+              </div>
+              {debtors.length > 1 && (
+                <button onClick={shareGroup} aria-label={groupStatus ? (groupStatus === "copied" ? "Summary copied" : "Shared") : "Share summary with group"} title="Share summary with group" style={{
+                  flexShrink: 0, borderRadius: 999, padding: "8px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer", border: "none",
+                  background: "#fff", color: groupStatus ? "var(--success-text)" : "var(--accent)",
+                  display: "inline-flex", alignItems: "center", gap: 6
+                }}>
+                  {groupStatus ? <><CheckIcon size={14} /> {groupStatus === "copied" ? "Copied" : "Shared"}</> : <><ShareIcon size={14} /> Share</>}
+                </button>
+              )}
             </div>
             {debtors.length > 0 && toCollect > 0 && (
               <div style={{ marginTop: 12 }}>
@@ -1140,16 +1150,6 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
                 })}
                 {bill.taxes?.map(t => lineRow(`tax-${t.id}`, t.name, bill.taxSplit === "proportional" ? "· proportional" : "· everyone", t.amount, "#fff"))}
               </div>
-            )}
-            {/* With one person to collect from, their own share button says the same thing */}
-            {debtors.length > 1 && (
-              <button onClick={shareGroup} style={{
-                width: "100%", marginTop: 14, borderRadius: 10, padding: 11, fontWeight: 700, fontSize: 14, cursor: "pointer", border: "none",
-                background: "#fff", color: groupStatus ? "var(--success-text)" : "var(--accent)",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6
-              }}>
-                {groupStatus ? <><CheckIcon size={15} /> {groupStatus === "copied" ? "Summary copied" : "Shared"}</> : <><ShareIcon /> Share summary with group</>}
-              </button>
             )}
           </div>
         );
