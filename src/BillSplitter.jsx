@@ -385,13 +385,8 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const [currency, setCurrency] = useState(initial?.currency || "₹");
   const [items, setItems] = useState(() => toRows(initial?.items, "1"));
   const [taxes, setTaxes] = useState(() => toRows(initial?.taxes, "t1"));
-  // "equal" | "proportional". A new bill starts with the last choice made on this device.
-  const [taxSplit, setTaxSplitState] = useState(() => initial?.taxSplit || readPref(TAX_SPLIT_PREF) || "equal");
-  const setTaxSplit = (update) => setTaxSplitState(prev => {
-    const next = typeof update === "function" ? update(prev) : update;
-    writePref(TAX_SPLIT_PREF, next);
-    return next;
-  });
+  // "equal" | "proportional", chosen on the Assign step. A new bill starts with the last choice made on this device.
+  const [taxSplit] = useState(() => initial?.taxSplit || readPref(TAX_SPLIT_PREF) || "equal");
 
   // Photo scanning
   const [apiConfig, setApiConfig] = useState(undefined); // undefined = loading, null = not set
@@ -490,7 +485,8 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
       currency,
       items: validItems,
       taxes: validTaxes,
-      taxSplit,
+      // Keep a choice made on Assign since this form opened; a new bill uses the remembered one
+      taxSplit: initial?.taxSplit || taxSplit,
       total
     });
   };
@@ -651,9 +647,9 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           <CheckIcon size={13} /> Scanned. Check the items against the bill (total {currency}{scannedTotal.toFixed(2)}) and fix anything the AI misread.
         </div>
       )}
-      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginBottom: 16 }}>
         <div style={{ flex: 2 }}>
-          <label style={labelStyle}>Restaurant / Place</label>
+          <label style={{ display: "block", fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Restaurant / Place</label>
           <div style={{ position: "relative" }}>
             <input value={restaurant} onChange={e => setRestaurant(e.target.value)} placeholder="e.g. Pizza Hut" style={{ ...inputStyle, paddingRight: restaurant ? 34 : 12 }} />
             {restaurant && (
@@ -666,8 +662,8 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           </div>
         </div>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Currency</label>
-          <select value={currency} onChange={e => setCurrency(e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
+          {/* "₹ INR" explains itself, so no visible label; it lines up with the restaurant input */}
+          <select value={currency} onChange={e => setCurrency(e.target.value)} aria-label="Currency" style={{ ...inputStyle, cursor: "pointer" }}>
             {!CURRENCIES.some(c => c.symbol === currency) && <option value={currency}>{currency}</option>}
             {CURRENCIES.map(c => <option key={c.symbol} value={c.symbol}>{c.symbol} {c.code}</option>)}
           </select>
@@ -702,21 +698,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
         width: "100%", marginBottom: 20
       }}>+ Add item</button>
 
-      {/* Heading, with how shared charges are divided at the right end: one tap switches */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
-        <span style={{ fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Shared Charges</span>
-        {/* The hint gives way first on narrow screens */}
-        <span style={{ flex: 1, fontSize: 12, color: "var(--subtle)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>(tax, service, etc.)</span>
-        <button
-          onClick={() => setTaxSplit(v => (v === "proportional" ? "equal" : "proportional"))}
-          aria-label={taxSplit === "proportional" ? "Split proportionally. Tap to split equally" : "Split equally. Tap to split proportionally"}
-          title={taxSplit === "proportional" ? "Tap to split equally" : "Tap to split in proportion to what each person had"}
-          style={{ flexShrink: 0, background: "none", border: "none", padding: 0, fontSize: 12, fontWeight: 600, fontFamily: "inherit", color: "var(--accent)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}
-        >
-          <span style={{ fontWeight: 400, color: "var(--subtle)" }}>Split</span> {taxSplit === "proportional" ? "proportionally" : "equally"}
-          <Icon d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" size={11} />
-        </button>
-      </div>
+      <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Shared Charges</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
         {taxes.map(tax => (
           <div key={tax.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -863,7 +845,7 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames, onMana
 }
 
 // ── Step 3: Assign ────────────────────────────────────────────────────────────
-function AssignStep({ bill, people, assignments, setAssignments }) {
+function AssignStep({ bill, people, assignments, setAssignments, onTaxSplit }) {
   // An item's list holds one entry per share ([a, a, b] = a had 2 of 3), so "selected" means "appears at all"
   const addMissing = (cur) => [...cur, ...people.map(p => p.id).filter(id => !cur.includes(id))];
 
@@ -914,7 +896,7 @@ function AssignStep({ bill, people, assignments, setAssignments }) {
                 <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14 }}>{item.name}</span>
                 {canExpand && (
                   <button onClick={toggleOpen} aria-expanded={!!expanded} style={{ background: "none", border: "none", padding: 0, fontSize: 12, lineHeight: "22px", fontWeight: 600, color: "var(--accent)", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>
-                    {uneven ? "Split unevenly" : "Split evenly"} <ChevronIcon up={expanded} size={12} />
+                    {uneven ? "Split by quantity" : "Split equally"} <ChevronIcon up={expanded} size={12} />
                   </button>
                 )}
                 <span style={{ fontWeight: 700, fontSize: 15, whiteSpace: "nowrap" }}>{bill.currency}{item.amount.toFixed(2)}</span>
@@ -963,7 +945,7 @@ function AssignStep({ bill, people, assignments, setAssignments }) {
                     );
                   })}
                   {uneven && (
-                    <button onClick={() => makeEven(item.id)} style={{ background: "none", border: "none", padding: "6px 0 0", fontSize: 11, color: "var(--subtle)", cursor: "pointer", textDecoration: "underline" }}>Split evenly again</button>
+                    <button onClick={() => makeEven(item.id)} style={{ background: "none", border: "none", padding: "6px 0 0", fontSize: 11, color: "var(--subtle)", cursor: "pointer", textDecoration: "underline" }}>Split equally again</button>
                   )}
                 </div>
               )}
@@ -974,7 +956,19 @@ function AssignStep({ bill, people, assignments, setAssignments }) {
       </div>
       {bill.taxes?.length > 0 && (
         <>
-          <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Shared Charges <span style={{ fontWeight: 400, fontSize: 12, color: "var(--subtle)" }}>{bill.taxSplit === "proportional" ? "(split proportionally)" : "(split equally)"}</span></div>
+          {/* How shared charges are divided, at the right end: one tap switches */}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Shared Charges</span>
+            <button
+              onClick={() => onTaxSplit(bill.taxSplit === "proportional" ? "equal" : "proportional")}
+              aria-label={bill.taxSplit === "proportional" ? "Split proportionally. Tap to split equally" : "Split equally. Tap to split proportionally"}
+              title={bill.taxSplit === "proportional" ? "Tap to split equally" : "Tap to split in proportion to what each person had"}
+              style={{ marginLeft: "auto", flexShrink: 0, background: "none", border: "none", padding: 0, fontSize: 12, fontWeight: 600, fontFamily: "inherit", color: "var(--accent)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}
+            >
+              <span style={{ fontWeight: 400, color: "var(--subtle)" }}>Split</span> {bill.taxSplit === "proportional" ? "proportionally" : "equally"}
+              <Icon d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" size={11} />
+            </button>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {bill.taxes.map(t => (
               <div key={t.id} style={{ display: "flex", justifyContent: "space-between", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px" }}>
@@ -1911,7 +1905,8 @@ export default function BillSplitter() {
             onDone={parsed => { setBill(parsed); setStep(1); }} />}
           {step === 1 && <PeopleStep people={people} setPeople={setPeople} bill={bill} savedNames={savedNames} setSavedNames={setSavedNames}
             onManageSaved={() => { setSettingsFocus("saved-people"); setView("settings"); }} />}
-          {step === 2 && <AssignStep bill={bill} people={people} assignments={assignments} setAssignments={setAssignments} />}
+          {step === 2 && <AssignStep bill={bill} people={people} assignments={assignments} setAssignments={setAssignments}
+            onTaxSplit={v => { setBill(b => ({ ...b, taxSplit: v })); writePref(TAX_SPLIT_PREF, v); }} />}
           {step === 3 && <SummaryStep
             bill={bill} people={people} assignments={assignments} payment={payment}
             onOpenSettings={() => setView("settings")}
