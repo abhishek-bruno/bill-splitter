@@ -4,7 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex" />
-  <title>Payment request</title>
+  <title>Your share of the bill</title>
+  <!-- Link preview card in chat apps. %PUBLIC_URL% is filled in at build time (vite.config.js) because
+       crawlers need an absolute image URL. The split itself is in the #hash, which crawlers never see. -->
+  <meta property="og:site_name" content="SplitEasy" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Your share of the bill" />
+  <meta property="og:description" content="See the full bill and pay" />
+  <meta property="og:image" content="%PUBLIC_URL%og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   <style>
     :root { --bg: #f3f4f6; --card: #fff; --text: #111; --muted: #6b7280; --accent: #6366f1; --line: #e5e7eb; }
     @media (prefers-color-scheme: dark) {

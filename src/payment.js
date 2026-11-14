@@ -129,18 +129,18 @@ export function payPageLink(args) {
 }
 
 // The pay page has a UPI button when a UPI ID is set, so say so instead of printing the ID
-const linkLabel = (bill, payment) => (hasUpi(bill, payment) ? "Pay by UPI or see the full bill" : "See the full bill");
+const linkHint = (bill, payment) => (hasUpi(bill, payment) ? "Open the link to pay by UPI or see the full bill." : "Open the link to see the full bill.");
 
 // One person's share: a greeting with their amount and a link to pay or see the full bill.
 // Without a link (no public URL) the items and UPI ID go in the text instead.
 export function buildShareText({ bill, person, assignments, people, payment, paid }) {
   const c = bill.currency;
   const page = payPageLink({ bill, person, assignments, people, payment, paid });
-  const lines = [`Hi ${person.name}, your share of the ${bill.restaurant} bill is *${money(c, person.total)}*.`];
-  if (!page) lines.push("", ...itemLines({ bill, person, assignments }), "");
-  // Link last: pasting the whole message into an address bar glues later lines onto the hash
-  if (page) lines.push(`${linkLabel(bill, payment)}: ${page}`);
-  else if (hasUpi(bill, payment)) lines.push(`UPI: ${payment.upiId}`);
+  const greeting = `Hi ${person.name}, your share of the ${bill.restaurant} bill is *${money(c, person.total)}*.`;
+  // Link first: chat apps show it as a preview card (and WhatsApp then hides the long URL)
+  if (page) return `${page}\n\n${greeting} ${linkHint(bill, payment)}`;
+  const lines = [greeting, "", ...itemLines({ bill, person, assignments }), ""];
+  if (hasUpi(bill, payment)) lines.push(`UPI: ${payment.upiId}`);
   return lines.join("\n").trim();
 }
 
@@ -150,16 +150,16 @@ export function buildGroupShareText({ bill, totals, assignments, payment, paid =
   const c = bill.currency;
   const [payer, ...debtors] = totals;
   const page = payPageLink({ bill, assignments, people: totals, payment, paid });
-  const lines = [`Hi all, here are the shares of the ${bill.restaurant} bill (${money(c, bill.total)}, paid by ${payer.name}):`, ""];
+  const lines = page ? [page, ""] : [];
+  lines.push(`Hi all, here are the shares of the ${bill.restaurant} bill (${money(c, bill.total)}, paid by ${payer.name}):`, "");
 
   debtors.forEach(p => {
     lines.push(paid[p.id] ? `${p.name}: ${money(c, p.total)} ✓ paid` : `${p.name}: *${money(c, p.total)}*`);
     if (!page) lines.push(...itemLines({ bill, person: p, assignments }));
   });
 
-  lines.push("");
-  if (page) lines.push(`${linkLabel(bill, payment)}: ${page}`);
-  else if (hasUpi(bill, payment)) lines.push(`UPI: ${payment.upiId}`);
+  if (page) lines.push("", linkHint(bill, payment));
+  else if (hasUpi(bill, payment)) lines.push("", `UPI: ${payment.upiId}`);
   return lines.join("\n").trim();
 }
 

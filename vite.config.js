@@ -22,6 +22,17 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      {
+        // pay.html is copied as is from public/; give its preview tags an absolute base URL
+        name: "pay-page-public-url",
+        apply: "build",
+        async writeBundle({ dir }) {
+          const { readFile, writeFile } = await import("node:fs/promises");
+          const file = `${dir}/pay.html`;
+          const base = VITE_PUBLIC_URL ? new URL("./", VITE_PUBLIC_URL).href : "";
+          await writeFile(file, (await readFile(file, "utf8")).replaceAll("%PUBLIC_URL%", base));
+        }
+      },
       VitePWA({
         registerType: "prompt", // src/UpdatePrompt.jsx asks before switching to a new version
         includeAssets: ["favicon.ico", "apple-touch-icon-180x180.png", "logo.svg", "pizza.svg"],
@@ -48,7 +59,7 @@ export default defineConfig(({ mode }) => {
           globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
           // The on-device reader's code (OCR + OpenCV, >10 MB) isn't installed for everyone; it's cached
           // at runtime once someone downloads a reader (see runtimeCaching below)
-          globIgnores: ["**/ondevice-*.js", "**/worker-entry-*.js"],
+          globIgnores: ["**/ondevice-*.js", "**/worker-entry-*.js", "**/og-image.png"],
           runtimeCaching: [
             {
               urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/assets\/(ondevice|worker-entry)-[^/]+\.js$/.test(url.pathname),
