@@ -61,13 +61,23 @@ const toRows = (list, fallbackId) => list?.length
   ? list.map(x => ({ ...x, amount: String(x.amount) }))
   : [{ id: fallbackId, name: "", amount: "" }];
 
-// Keeps a most-recent-first list of remembered strings, deduped case-insensitively
+// Saved people: most-recent-first { name, phone? }, deduped by name case-insensitively.
+// Older saves are plain name strings, so everything goes through asContact.
+const asContact = (x) => (typeof x === "string" ? { name: x } : x);
 const remember = (list, values, max) => {
-  const fresh = values.map(v => v.trim()).filter(Boolean);
-  const merged = [...fresh, ...list];
-  return merged.filter((v, i) => merged.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i).slice(0, max);
+  const out = [];
+  [...values, ...list].map(asContact).forEach(c => {
+    const name = c.name?.trim();
+    if (!name) return;
+    const i = out.findIndex(x => x.name.toLowerCase() === name.toLowerCase());
+    if (i === -1) out.push(c.phone ? { name, phone: c.phone } : { name });
+    else if (!out[i].phone && c.phone) out[i] = { ...out[i], phone: c.phone }; // keep a number once known
+  });
+  return out.slice(0, max);
 };
-const forget = (list, value) => list.filter(x => x.toLowerCase() !== value.toLowerCase());
+const forget = (list, name) => list.map(asContact).filter(x => x.name.toLowerCase() !== name.toLowerCase());
+// Contacts store numbers with spaces, dashes and brackets; keep digits and a leading +
+const cleanPhone = (tel) => (tel || "").trim().replace(/(?!^\+)[^\d]/g, "");
 
 // Red text button with an inline "Yes / No" confirm, skipped when needsConfirm is false
 function ConfirmButton({ label, prompt, onConfirm, needsConfirm = true, style }) {
@@ -578,13 +588,19 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
 const MAX_SAVED_NAMES = 30;
 const sameName = (a, b) => a.toLowerCase() === b.toLowerCase();
 
-function NameChip({ name, onPick, onForget }) {
+// One row in the Recent list: tap the row to add the person, × to forget them
+function RecentRow({ contact, color, onPick, onForget, first }) {
   return (
-    <div onMouseDown={e => e.preventDefault()} style={{ display: "flex", alignItems: "center", border: "1.5px solid var(--border)", borderRadius: 20, background: "var(--surface-2)", overflow: "hidden" }}>
-      <button onClick={onPick} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 4px 6px 12px", fontSize: 13, fontWeight: 600, color: "var(--text-2)" }}>
-        + {name}
+    <div style={{ display: "flex", alignItems: "center", borderTop: first ? "none" : "1px solid var(--divider)" }}>
+      <button onClick={onPick} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", cursor: "pointer", padding: "10px 4px", textAlign: "left", fontFamily: "inherit", color: "var(--text)" }}>
+        <Avatar name={contact.name} color={color} size={32} />
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{contact.name}</span>
+          {contact.phone && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{contact.phone}</span>}
+        </span>
+        <span style={{ color: "var(--accent)", fontWeight: 600, fontSize: 13, flexShrink: 0 }}>+ Add</span>
       </button>
-      <button onClick={onForget} aria-label={`Forget ${name}`} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 10px 6px 6px", fontSize: 16, lineHeight: 1, color: "var(--subtle)" }}>×</button>
+      <button onClick={onForget} aria-label={`Forget ${contact.name}`} style={{ background: "none", border: "none", cursor: "pointer", padding: "8px 4px 8px 12px", fontSize: 18, lineHeight: 1, color: "var(--subtle)" }}>×</button>
     </div>
   );
 }
@@ -592,22 +608,22 @@ function NameChip({ name, onPick, onForget }) {
 function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
   const [name, setName] = useState("");
 
-  // Adds several names at once (contact picker), skipping blanks and anyone already in the list
-  const addPeople = (raws) => {
-    const added = [];
+  // Adds several people at once ({ name, phone? } or plain names), skipping blanks and anyone already in
+  // the split, and remembers them (with their number) for the Recent list
+  const addPeople = (entries) => {
+    const contacts = entries.map(asContact).map(c => ({ ...c, name: (c.name || "").trim() })).filter(c => c.name);
+    if (!contacts.length) return;
     setPeople(prev => {
       const next = [...prev];
-      raws.forEach(raw => {
-        const n = raw.trim();
-        if (!n || next.some(p => sameName(p.name, n))) return;
+      contacts.forEach(c => {
+        if (next.some(p => sameName(p.name, c.name))) return;
         const used = new Set(next.map(p => p.color));
-        const color = COLORS.find(c => !used.has(c)) || COLORS[next.length % COLORS.length];
-        next.push({ id: `${Date.now()}-${next.length}`, name: n, color });
-        added.push(n);
+        const color = COLORS.find(col => !used.has(col)) || COLORS[next.length % COLORS.length];
+        next.push({ id: `${Date.now()}-${next.length}`, name: c.name, color, ...(c.phone && { phone: c.phone }) });
       });
       return next;
     });
-    if (added.length) setSavedNames(prev => remember(prev, added, MAX_SAVED_NAMES));
+    setSavedNames(prev => remember(prev, contacts, MAX_SAVED_NAMES));
   };
 
   const addPerson = (raw = name) => {
@@ -617,22 +633,34 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
   };
 
   // Contact Picker API: Chrome on Android only, so the button is hidden elsewhere.
-  // Only names are read; nothing leaves the device.
+  // Reads only the contacts the user ticks (name and first number); nothing leaves the device.
   const canPickContacts = typeof navigator !== "undefined" && "contacts" in navigator && "select" in (navigator.contacts || {});
+  const [pickError, setPickError] = useState("");
   const pickContacts = async () => {
+    setPickError("");
     try {
-      const picked = await navigator.contacts.select(["name"], { multiple: true });
-      addPeople(picked.map(c => c.name?.[0] || ""));
-    } catch {
-      // Picker closed or blocked; nothing to add
+      // Asking for a property the browser doesn't offer rejects the whole call, so only ask for supported ones
+      const supported = await navigator.contacts.getProperties?.().catch(() => null);
+      const props = ["name", "tel"].filter(p => !supported || supported.includes(p));
+      const picked = await navigator.contacts.select(props, { multiple: true });
+      // Closing the picker resolves with []; contacts saved without a name fall back to their number
+      addPeople(picked.map(c => {
+        const phone = cleanPhone(c.tel?.[0]) || undefined;
+        return { name: c.name?.find(n => n?.trim()) || phone || "", phone };
+      }));
+    } catch (e) {
+      setPickError(`Couldn't read contacts (${e?.name || "error"}${e?.message ? `: ${e.message}` : ""}). Add names by typing instead.`);
     }
   };
 
   const forgetName = (n) => setSavedNames(prev => forget(prev, n));
 
+  // Typing filters Recent by name or number
   const query = name.trim().toLowerCase();
-  const suggestions = savedNames.filter(n =>
-    !people.some(p => sameName(p.name, n)) && (!query || n.toLowerCase().includes(query))
+  const digits = query.replace(/\D/g, "");
+  const suggestions = savedNames.map(asContact).filter(c =>
+    !people.some(p => sameName(p.name, c.name)) &&
+    (!query || c.name.toLowerCase().includes(query) || (digits && c.phone?.includes(digits)))
   );
 
   return (
@@ -664,24 +692,31 @@ function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames }) {
           width: "100%", marginBottom: 16
         }}>👥 Add from contacts</button>
       )}
-      {suggestions.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--subtle)", marginBottom: 6 }}>Recent</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {suggestions.map(n => <NameChip key={n} name={n} onPick={() => addPerson(n)} onForget={() => forgetName(n)} />)}
-          </div>
-        </div>
-      )}
+      {pickError && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: -8, marginBottom: 12 }}>{pickError}</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {people.map(p => (
           <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--surface)", border: "1px solid var(--divider)", borderRadius: 10, padding: "10px 14px" }}>
             <Avatar name={p.name} color={p.color} />
-            <span style={{ flex: 1, fontWeight: 600 }}>{p.name}</span>
-            <button onClick={() => setPeople(prev => prev.filter(x => x.id !== p.id))} style={{ background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontWeight: 600 }}>{p.name}</span>
+              {p.phone && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{p.phone}</span>}
+            </span>
+            <button onClick={() => setPeople(prev => prev.filter(x => x.id !== p.id))} aria-label={`Remove ${p.name}`} style={{ background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
           </div>
         ))}
       </div>
-      {people.length === 0 && <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 13, padding: "24px 0" }}>Add at least 2 people to split with</div>}
+      {people.length === 0 && <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 13, padding: "16px 0" }}>Add at least 2 people to split with</div>}
+      {suggestions.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--subtle)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.4 }}>Recent</div>
+          <div style={{ background: "var(--surface)", border: "1px solid var(--divider)", borderRadius: 10, padding: "0 12px" }}>
+            {suggestions.map((c, i) => (
+              <RecentRow key={c.name} contact={c} color={COLORS[i % COLORS.length]} first={i === 0}
+                onPick={() => { addPeople([c]); setName(""); }} onForget={() => forgetName(c.name)} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1118,22 +1153,25 @@ function SettingsPage({ onClose, onKeyChanged, onClearSplit, onEraseAll, savedNa
         )}
       </div>
 
-      <div style={sectionTitle}>Saved names</div>
+      <div style={sectionTitle}>Saved people</div>
       <div style={card}>
         {savedNames.length === 0 ? (
-          <div style={{ fontSize: 14, color: "var(--muted)" }}>Names you add to a split are remembered here and suggested next time.</div>
+          <div style={{ fontSize: 14, color: "var(--muted)" }}>People you add to a split (with their number, when picked from contacts) are kept on this device and suggested next time.</div>
         ) : (
           <>
             <div style={{ display: "flex", flexDirection: "column", marginBottom: 12 }}>
-              {savedNames.map((n, i) => (
-                <div key={n} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid var(--divider)" : "none" }}>
-                  <Avatar name={n} color={COLORS[i % COLORS.length]} size={28} />
-                  <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{n}</span>
-                  <button onClick={() => setSavedNames(prev => prev.filter(x => x !== n))} aria-label={`Forget ${n}`} style={{ background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: "2px 6px" }}>×</button>
+              {savedNames.map(asContact).map((c, i) => (
+                <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid var(--divider)" : "none" }}>
+                  <Avatar name={c.name} color={COLORS[i % COLORS.length]} size={28} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontWeight: 600, fontSize: 14 }}>{c.name}</span>
+                    {c.phone && <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{c.phone}</span>}
+                  </span>
+                  <button onClick={() => setSavedNames(prev => forget(prev, c.name))} aria-label={`Forget ${c.name}`} style={{ background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: "2px 6px" }}>×</button>
                 </div>
               ))}
             </div>
-            <button onClick={() => { if (window.confirm("Forget all saved names?")) { setSavedNames([]); flash("Saved names cleared."); } }} style={{ ...outlineBtn("var(--danger)", "var(--danger-border)"), width: "100%" }}>Clear all names</button>
+            <button onClick={() => { if (window.confirm("Forget all saved people?")) { setSavedNames([]); flash("Saved people cleared."); } }} style={{ ...outlineBtn("var(--danger)", "var(--danger-border)"), width: "100%" }}>Clear all saved people</button>
           </>
         )}
       </div>
