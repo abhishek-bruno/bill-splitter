@@ -109,7 +109,7 @@ async function httpError(res, provider) {
     msg = err?.message || "";
     reason = err?.details?.find(d => d.reason)?.reason || "";
   } catch { /* non-JSON body */ }
-  if (res.status === 401 || res.status === 403 || reason === "API_KEY_INVALID") return new Error(`${PROVIDERS[provider].label} rejected the API key. Check it in settings.`);
+  if (res.status === 401 || res.status === 403 || reason === "API_KEY_INVALID") return new Error(`${PROVIDERS[provider].label} rejected the API key. Check the key, or change the model.`);
   if (res.status === 429) return new Error(`${PROVIDERS[provider].label} rate limit or quota reached. Try again later.`);
   const error = new Error(msg || `${PROVIDERS[provider].label} request failed (${res.status}).`);
   error.overloaded = isOverloaded(res);
@@ -223,7 +223,7 @@ async function callAnthropic({ apiKey, model }, img) {
       ? await client.beta.messages.create({ ...params, ...fallback })
       : await client.messages.create(params);
   } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw new Error("Anthropic rejected the API key. Check it in settings.");
+    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw new Error("Anthropic rejected the API key. Check the key, or change the model.");
     if (e instanceof Anthropic.RateLimitError) throw new Error("Anthropic rate limit reached. Try again later.");
     if (e instanceof Anthropic.APIError) throw new Error(e.error?.error?.message || e.message);
     throw e;

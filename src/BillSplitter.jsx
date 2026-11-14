@@ -322,6 +322,13 @@ function ApiKeySettings({ config, savedKeys = {}, onSave, onCancel, heading = tr
   const cleanedKey = cleanApiKey(apiKey);
   const keyInvalid = cleanedKey !== "" && !isValidApiKey(cleanedKey);
 
+  // What the button does for the shown provider: use a saved key as is, save changes and use them, or save a new key
+  const saved = savedKeys[provider];
+  const inUse = config?.provider === provider && config.apiKey === cleanedKey && config.model === (model.trim() || p.defaultModel);
+  const unchanged = saved && saved.apiKey === cleanedKey && (saved.model || p.defaultModel) === (model.trim() || p.defaultModel);
+  const actionLabel = inUse ? "In use" : unchanged ? "Use this" : saved ? "Save and use" : "Save key";
+  const canSave = !!cleanedKey && !keyInvalid && !inUse;
+
   const save = async () => {
     setSaving(true);
     await onSave({ provider, apiKey: cleanedKey, model: model.trim() || p.defaultModel });
@@ -341,7 +348,10 @@ function ApiKeySettings({ config, savedKeys = {}, onSave, onCancel, heading = tr
             border: `1.5px solid ${provider === id ? "var(--accent)" : "var(--border)"}`,
             background: provider === id ? "var(--accent-soft)" : "var(--surface)",
             color: provider === id ? "var(--accent)" : "var(--muted)"
-          }}>{info.label}</button>
+          }}>
+            {info.label}
+            {savedKeys[id] && <span title="Key saved" style={{ marginLeft: 4, color: "var(--success-text)" }}><CheckIcon size={11} /></span>}
+          </button>
         ))}
       </div>
 
@@ -384,11 +394,12 @@ function ApiKeySettings({ config, savedKeys = {}, onSave, onCancel, heading = tr
         const actions = (
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onCancel} style={{ flex: 1, border: "1.5px solid var(--border)", background: "var(--surface)", borderRadius: 10, padding: 12, fontWeight: 600, fontSize: 15, cursor: "pointer", color: "var(--text-2)" }}>Cancel</button>
-            <button onClick={save} disabled={!cleanedKey || keyInvalid || saving} style={{
+            <button onClick={save} disabled={!canSave || saving} style={{
               flex: 2, border: "none", borderRadius: 10, padding: 12, fontWeight: 700, fontSize: 15,
-              background: cleanedKey && !keyInvalid ? "var(--accent)" : "var(--border)", color: cleanedKey && !keyInvalid ? "#fff" : "var(--subtle)",
-              cursor: cleanedKey && !keyInvalid ? "pointer" : "default"
-            }}>{saving ? "Saving…" : "Save key"}</button>
+              display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+              background: canSave ? "var(--accent)" : "var(--border)", color: canSave ? "#fff" : "var(--subtle)",
+              cursor: canSave ? "pointer" : "default"
+            }}>{saving ? "Saving…" : <>{inUse && <CheckIcon size={14} />}{actionLabel}</>}</button>
           </div>
         );
         return actions;
@@ -443,11 +454,8 @@ function ApiKeySheet({ config, onSave, onClose, onRemove }) {
       {tab === "device" ? (
         <LocalEngines config={config} onUse={(id) => onSave({ provider: `local-${id}` })} onRemoved={(id) => { if (config?.provider === `local-${id}`) onRemove?.(); }} />
       ) : savedKeys && (
-        <ApiKeySettings config={local ? null : config} savedKeys={savedKeys} onSave={save} onCancel={onClose} heading={false}>
-          {config && !local && onRemove && (
-            <button onClick={async () => { await forgetCloudKey(config.provider); onRemove(); }} style={{ ...linkBtn, color: "var(--danger)", margin: "0 auto 16px" }}>Remove saved key</button>
-          )}
-        </ApiKeySettings>
+        // Removing a key lives in Settings > Bill scanning
+        <ApiKeySettings config={local ? null : config} savedKeys={savedKeys} onSave={save} onCancel={onClose} heading={false} />
       )}
     </Sheet>
   );
@@ -636,6 +644,8 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
     setApiConfig(cfg);
     setKeySheet(null);
     setError("");
+    // Changed reader on the reading screen: read the same photo again with it (no need to pick it again)
+    if (mode === "upload" && lastFile) scanFile(lastFile, cfg);
   };
 
   const removeConfig = async () => {
@@ -665,12 +675,12 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
     scanFile(file);
   };
 
-  const scanFile = async (file) => {
-    const run = ++scanRun.current;
+  const scanFile = async (file, config = apiConfig) => {
+    const run = ++scanRun.current; // a newer scan (or Cancel) makes this one's result be ignored
     setError("");
     setLoading(true);
     try {
-      const bill = await parseBillImage(file, apiConfig);
+      const bill = await parseBillImage(file, config);
       if (run !== scanRun.current) return; // cancelled
       setRestaurant(bill.restaurant);
       if (bill.currency) setCurrency(bill.currency);
@@ -822,6 +832,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
     return (
       <div className="fill">
         {fileInputs}
+        {keySheetEl}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: "8px 0 16px" }}>
           {preview && (
             <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", maxWidth: "100%", boxShadow: "0 4px 20px #0002" }}>
@@ -832,10 +843,19 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           {loading ? (
             <div style={{ textAlign: "center" }}>
               <div style={{ fontWeight: 700, color: "var(--text)" }}>Reading bill…</div>
-              <div style={{ fontSize: 12, color: "var(--subtle)", marginTop: 2 }}>{readerLabel(apiConfig)}</div>
+              <div style={{ fontSize: 12, color: "var(--subtle)", marginTop: 2 }}>
+                {readerLabel(apiConfig)} · <button onClick={() => setKeySheet("change")} style={{ ...linkBtn, display: "inline", fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>Change</button>
+              </div>
             </div>
           ) : error && (
-            <div style={{ fontSize: 14, color: "var(--danger)", background: "var(--danger-soft)", borderRadius: 10, padding: "10px 14px", textAlign: "center", maxWidth: 360 }}>{error}</div>
+            // The error, and right under it which model failed with a way to change it (re-reads this photo)
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, maxWidth: 360, width: "100%" }}>
+              <div style={{ fontSize: 14, color: "var(--danger)", background: "var(--danger-soft)", borderRadius: 10, padding: "10px 14px", textAlign: "center", width: "100%", boxSizing: "border-box" }}>{error}</div>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, fontSize: 12, color: "var(--subtle)" }}>
+                Scanning with {readerLabel(apiConfig)} ·
+                <button onClick={() => setKeySheet("change")} style={{ ...linkBtn, fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>Change</button>
+              </div>
+            </div>
           )}
         </div>
         <style>{`.scan-line { position: absolute; left: 0; right: 0; height: 3px; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: scanmove 1.6s ease-in-out infinite alternate; }
@@ -844,17 +864,10 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
           {loading ? (
             <button onClick={cancelScan} style={{ ...footerBackBtn, width: "100%" }}>Cancel</button>
           ) : (
-            // Couldn't read it: try the same photo again, take or pick another, or type it in
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", gap: 8 }}>
-                {lastFile && <button onClick={() => scanFile(lastFile)} disabled={!canScan} style={{ ...homeBtn(true), flex: 1 }}>Try again</button>}
-                <button onClick={() => cameraRef.current.click()} style={{ ...homeBtn(false), flex: 1 }}><CameraIcon size={18} /> Retake</button>
-                <button onClick={() => galleryRef.current.click()} style={{ ...homeBtn(false), flex: 1 }}><PhotoIcon size={18} /> Gallery</button>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={goLanding} style={footerBackBtn}><ArrowLeftIcon size={16} /> Back</button>
-                <button onClick={() => { setError(""); setMode("manual"); }} style={{ ...footerBackBtn, flex: 1 }}><PencilIcon size={16} /> Type it in</button>
-              </div>
+            // Couldn't read it: the same photo again, or (link below) with another model. Anything else starts from home.
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={cancelScan} style={{ ...footerBackBtn, flex: 1 }}>Cancel</button>
+              {lastFile && <button onClick={() => scanFile(lastFile)} disabled={!canScan} style={{ ...homeBtn(true), flex: 2, padding: 12 }}>Try again</button>}
             </div>
           )}
         </StickyFooter>
