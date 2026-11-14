@@ -80,7 +80,7 @@ function Avatar({ name, color, size = 32 }) {
 
 // Earlier steps are buttons that jump back; the current and later ones are plain labels
 function StepBar({ current, onJump }) {
-  const labels = ["Bill", "People", "Assign", "Settle"];
+  const labels = ["Bill", "People", "Split", "Settle"];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
       {labels.map((l, i) => {
@@ -164,15 +164,49 @@ const ResetButton = ({ onReset, hasData }) => (
   <ConfirmButton label={<span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Glyph size={13}><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></Glyph> Reset</span>} prompt="Delete progress?" onConfirm={onReset} needsConfirm={hasData} />
 );
 
-// Home page selling points; icons are 24x24 stroke paths
+// Home page promises: small icon chips under the headline; icons are 24x24 stroke paths
 const FEATURES = [
-  { title: "Fully local, no account", text: "No sign-up. Your data stays on your phone.",
+  { title: "Fully local", // cloud with a slash
     icon: <><path d="M2 2l20 20" /><path d="M5.8 5.8A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.3-.2" /><path d="M21.5 16.5A4.5 4.5 0 0 0 17.5 10h-1.8A7 7 0 0 0 10 5.1" /></> },
-  { title: "Enter the bill, get the split", text: "Items split by who had them, taxes shared equally.",
-    icon: <><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" /><path d="M9 7h6M9 11h6M9 15h3" /></> },
-  { title: "Share payment details", text: "Send each person their share with a UPI pay link.",
-    icon: <><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></> }
+  { title: "No sign-up", // person with a cross
+    icon: <><circle cx="9" cy="7" r="4" /><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" /><path d="M17 8l5 5M22 8l-5 5" /></> },
+  { title: "Free", // gift box
+    icon: <><rect x="3" y="8" width="18" height="4" rx="1" /><path d="M12 8v13" /><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" /><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5" /></> }
 ];
+
+// Home intro: a little drawing of what the app does (a bill shared by three friends), the headline,
+// and the promises as chips. Styles in index.css (.hero-*)
+function HomeHero() {
+  return (
+    <div className="hero">
+      <div className="hero-art" aria-hidden="true">
+        <div className="hero-bill">
+          <div className="hero-bill-title" />
+          {[62, 48, 70, 40].map((w, i) => (
+            <div key={i} className="hero-bill-row"><span style={{ width: `${w}%` }} /><span /></div>
+          ))}
+          <div className="hero-bill-total"><span /><span /></div>
+        </div>
+        <div className="hero-people">
+          {[0, 1, 2].map(i => (
+            <span key={i} style={{ background: COLORS[i] }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4.5" /><path d="M3.5 21a8.5 8.5 0 0 1 17 0z" /></svg>
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="hero-title">Split any bill by item in seconds</div>
+      <div className="hero-chips">
+        {FEATURES.map(f => (
+          <span key={f.title} className="hero-chip">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{f.icon}</svg>
+            {f.title}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // Top navigation row shown on every screen: Back on the left, Reset on the right
 function TopBar({ onBack, onReset, hasData }) {
@@ -200,8 +234,8 @@ function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel]);
   return createPortal(
-    <div onClick={onCancel} style={{ position: "fixed", inset: 0, zIndex: 60, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div role="alertdialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={el => el?.focus()} onClick={e => e.stopPropagation()} style={{
+    <div onClick={onCancel} className="fade-in" style={{ position: "fixed", inset: 0, zIndex: 60, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div role="alertdialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={el => el?.focus()} onClick={e => e.stopPropagation()} className="dialog-in" style={{
         outline: "none",
         width: "100%", maxWidth: 340, background: "var(--surface)", color: "var(--text)", borderRadius: 16, padding: "20px 18px 16px", boxShadow: "0 12px 40px #0004"
       }}>
@@ -745,27 +779,10 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   const canScan = online || localReader; // the on-device reader works offline
 
   if (!mode) return (
-    <div className="fill">
+    <div className="fill screen-in" key="home">
       {/* Intro block centers itself vertically in the space above the buttons */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", paddingBottom: 16 }}>
-      <div style={{ fontWeight: 700, fontSize: 17, color: "var(--text)", lineHeight: 1.3 }}>Split any bill in seconds</div>
-      <div className="home-sub" style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>Enter what everyone had and see who owes what.</div>
-      <div className="home-features" style={{ display: "flex", flexDirection: "column" }}>
-        {FEATURES.map(f => (
-          <div key={f.title} style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: "var(--accent-soft)", color: "var(--accent)",
-              display: "flex", alignItems: "center", justifyContent: "center"
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{f.icon}</svg>
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{f.title}</div>
-              <div className="home-feature-text" style={{ fontSize: 13, color: "var(--muted)", marginTop: 1, lineHeight: 1.4 }}>{f.text}</div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <HomeHero />
       </div>
       <StickyFooter bleed>
         {/* Row 1: scan (camera / gallery) or, before setup, one setup button. Row 2: enter manually */}
@@ -801,7 +818,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   // Reading screen: the photo being read; Cancel goes home. A failed read offers ways on from the footer.
   if (mode === "upload") {
     return (
-      <div className="fill">
+      <div className="fill screen-in" key="upload">
         {fileInputs}
         {keySheetEl}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: "8px 0 16px" }}>
@@ -875,7 +892,7 @@ function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, onBack 
   // Manual mode (also used to review scanned results)
   const manualValid = items.some(i => i.name.trim() && parseFloat(i.amount) > 0);
   return (
-    <div className="fill">
+    <div className="fill screen-in" key="manual">
       {fileInputs}
       {billCard}
       {showPhoto && lastFile && <PhotoSheet file={lastFile} onClose={() => setShowPhoto(false)} />}
@@ -1448,7 +1465,7 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
               </div>
             </div>
             {open[p.id] && (
-              <div style={{ marginTop: 10, paddingTop: 6, borderTop: "1px solid var(--divider)" }}>
+              <div className="fade-in" style={{ marginTop: 10, paddingTop: 6, borderTop: "1px solid var(--divider)" }}>
                 {linesFor(p).map((l, k) => lineRow(k, l.label, l.note, l.amount, "var(--text-2)"))}
               </div>
             )}
@@ -2038,7 +2055,7 @@ export default function BillSplitter() {
   };
 
   // The step indicator shows while building the split; the settle screen (step 3) is the result, so it's hidden there
-  const showSteps = view === "split" && step < 3;
+  const showSteps = view === "split" && step < 3 && !(step === 0 && !billMode); // not on the home page
 
   // Footer Back always goes to the previous step (not just the last screen visited), replacing the
   // current history entry so browser Back doesn't bounce forward again. People goes back to editing the bill.
@@ -2153,7 +2170,7 @@ export default function BillSplitter() {
         </div>
 
         {view === "history" && (
-          <div className="fill" style={{ padding: "16px 24px 24px" }}>
+          <div className="fill screen-in" key={openEntry ? openEntry.id : "list"} style={{ padding: "16px 24px 24px" }}>
             {openEntry ? (
               <HistoryDetail
                 entry={openEntry} payment={payment}
@@ -2171,7 +2188,7 @@ export default function BillSplitter() {
         )}
 
         {view === "settings" && (
-          <div className="fill" style={{ padding: "16px 24px 24px" }}>
+          <div className="fill screen-in" style={{ padding: "16px 24px 24px" }}>
             <SettingsPage
               focus={settingsFocus}
               onFocused={() => setSettingsFocus(null)}
@@ -2189,8 +2206,8 @@ export default function BillSplitter() {
         )}
 
         {/* Hidden rather than unmounted while other views are open, so an in-progress bill form isn't lost */}
-        <div className="fill" style={view === "split" ? undefined : { display: "none" }}>
-        <div className="fill" style={{ padding: "16px 24px 24px" }}>
+        <div className="fill screen-in" style={view === "split" ? undefined : { display: "none" }}>
+        <div className="fill screen-in" key={`step-${step}`} style={{ padding: "16px 24px 24px" }}>
           {step === 0 && <BillStep
             key={resetCount} initial={bill} keyVersion={keyVersion} onReset={resetSplit}
             mode={billMode} setMode={setBillMode} onBack={() => { replaceNext.current = true; setBillMode(null); }}

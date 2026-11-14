@@ -68,13 +68,60 @@ html { scroll-padding-top: 150px; scroll-padding-bottom: 96px; }
   .sticky-footer { border-radius: 0 0 20px 20px; }
 }
 
-/* Home page: roomy on tall phones, compact on short ones so the page never needs to scroll */
-.home-sub { margin-bottom: 20px; }
-.home-features { gap: 14px; }
-@media (max-height: 760px) {
-  .home-sub { margin-bottom: 14px; }
-  .home-features { gap: 8px; }
-  .home-feature-text { display: none; }
+/* Home intro (HomeHero): a tilted bill with three friends, headline, promise chips */
+.hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.hero-art { position: relative; width: 150px; height: 150px; margin-bottom: 22px; }
+.hero-art::before { /* soft glow behind the bill */
+  content: ""; position: absolute; inset: -18px; border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-soft) 0%, transparent 70%); }
+.hero-bill {
+  position: absolute; left: 22px; top: 6px; width: 104px; padding: 14px 12px 18px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px 10px 4px 4px;
+  box-shadow: 0 10px 30px #0000001a; transform: rotate(-6deg);
+  display: flex; flex-direction: column; gap: 8px; animation: hero-bill-in .5s var(--ease-out) both; }
+.hero-bill-title { width: 55%; height: 8px; border-radius: 4px; background: var(--accent); opacity: .85; margin-bottom: 4px; }
+.hero-bill-row, .hero-bill-total { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.hero-bill-row span { height: 5px; border-radius: 3px; background: var(--border); }
+.hero-bill-row span:last-child { width: 18%; }
+.hero-bill-total { border-top: 1.5px dashed var(--border-strong); padding-top: 8px; margin-top: 2px; }
+.hero-bill-total span { height: 7px; border-radius: 4px; background: var(--text-2); width: 34%; }
+.hero-bill-total span:last-child { width: 26%; }
+.hero-people { position: absolute; right: 2px; bottom: 4px; display: flex; }
+.hero-people span {
+  width: 34px; height: 34px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 13px;
+  display: flex; align-items: center; justify-content: center; border: 3px solid var(--surface);
+  margin-left: -10px; animation: hero-pop .35s var(--ease-out) both; }
+.hero-people span:nth-child(1) { animation-delay: .25s; }
+.hero-people span:nth-child(2) { animation-delay: .35s; }
+.hero-people span:nth-child(3) { animation-delay: .45s; }
+.hero-title { white-space: nowrap; font-weight: 800; font-size: min(21px, 5.4vw); /* one line, shrinking on narrow phones */ letter-spacing: -.3px; color: var(--text); line-height: 1.25; }
+.hero-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 14px; }
+.hero-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); font-size: 12px; font-weight: 600; }
+.hero-chip svg { color: var(--accent); }
+@keyframes hero-bill-in { from { opacity: 0; transform: translateY(8px) rotate(-9deg); } }
+@keyframes hero-pop { from { opacity: 0; transform: scale(.7); } }
+.hero-title, .hero-chips { animation: rise-in .4s var(--ease-out) both; }
+.hero-title { animation-delay: .1s; }
+.hero-chips { animation-delay: .2s; }
+@media (max-height: 700px) { .hero-art { transform: scale(.8); margin: -12px 0 10px; } }
+@media (max-height: 600px) { .hero-art { transform: scale(.6); margin: -30px 0 -8px; } }
+
+/* Motion: short enter animations only. Screens fade (opacity only, so sticky footers aren't affected),
+   sheets slide up, dialogs scale in from 96%. Turned off when the phone asks for reduced motion. */
+:root { --ease-out: cubic-bezier(.2, .8, .2, 1); }
+.screen-in { animation: fade-in .2s ease-out both; }
+.fade-in { animation: fade-in .18s ease-out both; }
+.sheet-in { animation: sheet-in .28s var(--ease-out) both; }
+.dialog-in { animation: dialog-in .2s var(--ease-out) both; }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes sheet-in { from { transform: translateY(32px); opacity: 0; } }
+@keyframes dialog-in { from { transform: scale(.96); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .screen-in, .fade-in, .sheet-in, .dialog-in, .install-toast,
+  .hero-bill, .hero-people span, .hero-title, .hero-chips { animation: none; }
 }
 
 .install-toast { animation: toast-in .25s ease-out; }

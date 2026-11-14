@@ -17,8 +17,8 @@ export default function UpdatePrompt() {
   if (!needRefresh || later) return null;
   const btn = { flex: 1, borderRadius: 10, padding: 11, fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "inherit" };
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 70, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div role="alertdialog" aria-modal="true" aria-label="Update available" style={{
+    <div className="fade-in" style={{ position: "fixed", inset: 0, zIndex: 70, background: "#0008", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div role="alertdialog" aria-modal="true" aria-label="Update available" className="dialog-in" style={{
         width: "100%", maxWidth: 340, background: "var(--surface)", color: "var(--text)", borderRadius: 16, padding: "20px 18px 16px", boxShadow: "0 12px 40px #0004"
       }}>
         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>Update available</div>
