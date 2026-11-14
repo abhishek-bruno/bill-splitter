@@ -1050,6 +1050,8 @@ function CopyAmount({ value, display, label, style }) {
 function SummaryStep({ bill, people, assignments, payment, onOpenSettings, savedAt, paid = {}, onTogglePaid }) {
   const totals = computeTotals(bill, people, assignments);
   const owes = (p) => p.total >= 0.005;
+  // With a UPI ID (₹ bills) the shared link has a pay button; otherwise it's the split breakdown
+  const canPay = supportsUpi(bill) && !!payment?.upiId;
   // Expanded cards: "bill" for the top card (full breakdown), or person ids (their own lines)
   const [open, setOpen] = useState({});
   const toggle = (key) => setOpen(prev => ({ ...prev, [key]: !prev[key] }));
@@ -1208,7 +1210,7 @@ function SummaryStep({ bill, people, assignments, payment, onOpenSettings, saved
                 fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "background .2s",
                 display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
               }}>
-                {status[p.id] ? <><CheckIcon size={15} /> {status[p.id] === "copied" ? "Copied to clipboard" : "Shared"}</> : <><ShareIcon /> Share payment details</>}
+                {status[p.id] ? <><CheckIcon size={15} /> {status[p.id] === "copied" ? "Copied to clipboard" : "Shared"}</> : <><ShareIcon /> {canPay ? "Share payment link" : "Share split details"}</>}
               </button>
               {upiRequest({ bill, person: p, people, payment }) && (
                 <button onClick={() => setQrPerson(p)} aria-label={`Show UPI QR for ${p.name}`} title="Show QR to scan and pay" style={{
