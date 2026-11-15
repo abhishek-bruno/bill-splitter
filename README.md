@@ -54,14 +54,10 @@ Other splitting apps need everyone on the same app. SplitEasy only needs the per
 
 Take a photo, and SplitEasy reads the items, prices, taxes and total. Check it, fix anything, done.
 
-| Read it with | Why |
-|---|---|
-| 📱 **On Device AI** | Free, private, works offline |
-| ☁️ **Cloud AI** | Messy bills, Gemini has a free tier |
-| ⌨️ **Type it in** | Quick, with a running total |
-
-- ↕️ **Long-press** a row to reorder it, or move it into Shared Charges.
-- 🧾 **Discounts and round-off** are handled.
+- 📱 **On Device AI:** free, private, works offline
+- ☁️ **Cloud AI:** for messy bills, Gemini has a free tier
+- ⌨️ **Type it in:** quick, with a running total
+- ↕️ **Long-press** a row to reorder it, or move it into Shared Charges
 
 <br clear="right" />
 
@@ -71,12 +67,9 @@ Take a photo, and SplitEasy reads the items, prices, taxes and total. Check it, 
 
 Add the people at the table, then tap who had each item.
 
-| Option | How it splits |
-|---|---|
-| 🍽️ **Shared dishes** | Split equally |
-| 🔢 **By quantity** | Set how many each had |
-| 🧾 **Taxes** | Equal, or by what each ordered |
-| ⚡ **Everyone** | One tap on all items |
+- 🍽️ **Shared dishes** split equally
+- 🔢 **By quantity** when people had different amounts
+- 🧾 **Taxes** shared equally, or by what each ordered
 
 > **Example:** 3 mocktails for ₹500. Ravi had 1, Meera had 2, so Ravi pays **₹166.67** and Meera pays **₹333.33**.
 
@@ -88,12 +81,10 @@ Add the people at the table, then tap who had each item.
 
 See everyone's total, then collect your way:
 
-| Tap | To |
-|---|---|
-| 📷 **Show QR** | Scan and pay at the table |
-| 🔗 **Payment link** | Send one person their share |
-| 👥 **Share** | Send the whole split |
-| ✅ **Mark as paid** | As the money comes in |
+- 📷 **Show QR** to pay at the table
+- 🔗 **Payment link** for one person, on WhatsApp or any app
+- 👥 **Share** the whole split with the group
+- ✅ **Mark as paid** as the money comes in
 
 <br clear="right" />
 
@@ -106,11 +97,12 @@ See everyone's total, then collect your way:
   <img src="docs/screenshots/qr.png" alt="Scan to pay" width="200" />
 </p>
 
-| 👆 Tap your name | 💳 Pay by UPI | 🧾 View full bill | ✅ Mark as paid |
-|:---:|:---:|:---:|:---:|
-| On a group link | Amount filled in, any UPI app | As printed, and split by person | Saved under History |
-
 No app, no login. The link opens in any browser.
+
+- 👆 **Tap your name** on a group link
+- 💳 **Pay by UPI**, amount filled in
+- 🧾 **View full bill**, as printed and split by person
+- ✅ **Mark as paid**, saved under History
 
 ### ✅ 4. Track who has paid
 
@@ -121,14 +113,10 @@ No app, no login. The link opens in any browser.
 
 Every split is saved to **History** when you reach the result.
 
-| Feature | What you see |
-|---|---|
-| 📋 **At a glance** | "1 of 2 paid" or "Settled" on every split |
-| ✅ **Mark as paid** | Records the date, with Undo |
-| 📊 **Left to collect** | Amount and progress bar |
-| 🔁 **Remind** | Share the link or show the QR again |
-| ✏️ **Edit or delete** | Fix a split, or long-press to clear old ones |
-| 📥 **Requests** | Links you received, with your share and status |
+- 📋 **"1 of 2 paid"** or **"Settled"** on every split
+- ✅ **Mark as paid**, with the date and Undo
+- 🔁 **Remind** by sharing the link or QR again
+- 📥 **Requests** you received, in their own tab
 
 ## Your data stays yours
 
@@ -150,9 +138,8 @@ Every split is saved to **History** when you reach the result.
 
 Open **[SplitEasy](https://abhishek-bruno.github.io/bill-splitter/)** once while online, then:
 
-| 🤖 Android (Chrome) | 🍎 iPhone (Safari) |
-|:---:|:---:|
-| Menu, then **Install app** | Share, then **Add to Home Screen** |
+- 🤖 **Android (Chrome):** menu, then **Install app**
+- 🍎 **iPhone (Safari):** Share, then **Add to Home Screen**
 
 It opens like an app, works offline, and asks before updating.
 
