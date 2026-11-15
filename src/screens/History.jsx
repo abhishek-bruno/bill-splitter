@@ -7,26 +7,24 @@ import { useSwipeTabs } from "../hooks/useSwipeTabs.js";
 import { formatDateTime } from "../lib/format.js";
 import { historyContacts } from "../lib/savedPeople.js";
 import { paidStatus, personInSplit, personSummary } from "../lib/totals.js";
-import { COLORS } from "../lib/constants.js";
 import { SettleStep } from "./SettleStep.jsx";
+import { TextField } from "../components/TextField.jsx";
+import { filterSplits } from "../lib/historySearch.js";
+import { Select } from "../components/Select.jsx";
 
 const money = (owes) => Object.entries(owes).map(([c, n]) => `${c}${n.toFixed(2)}`).join(" + ");
 
-// Pick a person to see only their splits, with what they still owe across them
-function PersonFilter({ contacts, person, setPerson }) {
-  const chip = (on) => ({
-    flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 600,
-    cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
-    border: `1px solid ${on ? "var(--accent)" : "var(--border)"}`, background: on ? "var(--accent-soft)" : "var(--surface)", color: on ? "var(--accent)" : "var(--text-2)"
-  });
+// Search splits and pick a person: one compact row instead of a scrolling list of names
+function HistoryFilters({ contacts, query, setQuery, person, setPerson }) {
   return (
-    <div role="group" aria-label="Filter by person" className="no-scrollbar" style={{ display: "flex", gap: 6, overflowX: "auto", margin: "0 -24px 12px", padding: "0 24px 2px" }}>
-      <button onClick={() => setPerson(null)} aria-pressed={!person} style={chip(!person)}>All</button>
-      {contacts.map((c, i) => (
-        <button key={c.id} onClick={() => setPerson(person === c.id ? null : c.id)} aria-pressed={person === c.id} style={chip(person === c.id)}>
-          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 4, background: COLORS[i % COLORS.length] }} />{c.name}
-        </button>
-      ))}
+    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <TextField size="sm" type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search splits"
+        aria-label="Search splits by place, person or item" style={{ flex: 1, minWidth: 0 }} />
+      {contacts.length > 1 && (
+        <Select size="sm" label="Show splits for" value={person || ""} onChange={v => setPerson(v || null)} highlight={!!person}
+          options={[{ value: "", label: "Everyone" }, ...contacts.map(c => ({ value: c.id, label: c.name }))]}
+          style={{ flex: "0 1 40%", minWidth: 0 }} />
+      )}
     </div>
   );
 }
@@ -51,7 +49,7 @@ function PersonSummary({ name, summary }) {
 }
 
 // Long-press a split to start selecting; while selecting, taps toggle instead of opening
-export function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, selected, setSelected, person = null, setPerson = () => {} }) {
+export function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, selected, setSelected, person = null, setPerson = () => {}, query = "", setQuery = () => {} }) {
   const selecting = selected.length > 0;
   const press = useRef(null); // { timer, x, y, fired }
   const toggle = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -73,7 +71,7 @@ export function HistoryList({ history, requests = [], tab = "splits", setTab, on
   // Filtering by person (by contact id); a person no longer in any split clears the filter
   const contacts = historyContacts(history);
   const personId = contacts.some(c => c.id === person) ? person : null;
-  const shown = personId ? history.filter(e => e.people.some(p => p.contactId === personId)) : history;
+  const shown = filterSplits(history, { query, person: personId });
   const canSwipe = requests.length > 0 || tab === "requests";
   const tap = (id) => {
     if (press.current?.fired) { press.current.fired = false; return; } // the long-press already handled it
@@ -157,8 +155,11 @@ export function HistoryList({ history, requests = [], tab = "splits", setTab, on
           Splits are saved here automatically when you reach the summary.
         </div>
       )}
-      {contacts.length > 1 && <PersonFilter contacts={contacts} person={personId} setPerson={setPerson} />}
+      {history.length > 0 && <HistoryFilters contacts={contacts} query={query} setQuery={setQuery} person={personId} setPerson={setPerson} />}
       {personId && <PersonSummary name={contacts.find(c => c.id === personId).name} summary={personSummary(history, personId)} />}
+      {history.length > 0 && shown.length === 0 && (
+        <div style={{ textAlign: "center", color: "var(--subtle)", fontSize: 14, padding: "24px 0" }}>No splits match.</div>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {shown.map(entry => {
           const { paidCount, total, settled } = paidStatus(entry);

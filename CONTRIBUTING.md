@@ -61,6 +61,7 @@ src/
 | `src/components/Sheet.jsx` | Bottom sheet (a modal on wide screens); Back closes it |
 | `src/components/QrSheet.jsx` | "Scan to pay" UPI QR |
 | `src/components/TextField.jsx` | The app's text field (sizes, error state); use it for every text input |
+| `src/components/Select.jsx` | The app's dropdown (themed list, keyboard support); use it instead of `<select>` |
 | `src/components/AddPersonInput.jsx` | Name field with an Add button, used on the People step and in Settings |
 | `src/hooks/useAddPerson.jsx` | The rules for adding someone by name, including the "Same person?" question |
 | `src/components/styles.js` | Shared inline styles (buttons, cards, the base field style) |
@@ -68,6 +69,7 @@ src/
 | `src/lib/splitLink.js` | Packs a split into a payment link and unpacks it again |
 | `src/lib/payment.js` | Share messages, pay page links, UPI links, share or copy |
 | `src/lib/requests.js` | Payment links opened on this device (written by the pay page, listed in History) |
+| `src/lib/historySearch.js` | History search and the person filter |
 | `src/lib/billForm.js` | The bill form's charge rows: charges and discounts as an amount or a percentage of the items, and totals |
 | `src/lib/storage.js` | localStorage hooks and keys for the split, history and preferences |
 | `src/lib/savedPeople.js` | Saved people with permanent ids: adding, matching a typed name, renaming everywhere, the one-time id upgrade |
@@ -169,7 +171,7 @@ The data is base64url of text fields separated by control characters (format ver
 
 ## Working on the code
 
-- **Styling:** components use inline styles with the colour tokens from `src/index.css` (`var(--surface)`, `var(--accent)` and so on). Use tokens rather than hard-coded colours so dark mode keeps working. Use `TextField` for text inputs rather than a styled `<input>`, so every field looks and behaves the same.
+- **Styling:** components use inline styles with the colour tokens from `src/index.css` (`var(--surface)`, `var(--accent)` and so on). Use tokens rather than hard-coded colours so dark mode keeps working. Use `TextField` for text inputs rather than a styled `<input>`, so every field looks and behaves the same, and `Select` rather than `<select>`.
 - **Phones first:** check every change at 390 × 844, and at 320 × 568 for small screens. Main actions sit at the bottom, within reach of a thumb.
 - **Motion:** keep animations short and subtle, and respect `prefers-reduced-motion`.
 - **Dependencies:** the app is small on purpose. Talk it through in an issue before adding one.

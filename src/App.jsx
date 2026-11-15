@@ -41,6 +41,7 @@ export default function App() {
   const [splitId, setSplitId] = usePersisted("splitId", null);
   const [history, setHistory] = useStoredState(HISTORY_KEY, []);
   const [historyPerson, setHistoryPerson] = useState(null); // History filtered to one person (contact id)
+  const [historyQuery, setHistoryQuery] = useState(""); // History search text
   const [requests, setRequests] = useStoredState(REQUESTS_KEY, []);
   // History has two lists: splits made here and requests received; the pay page links to ?tab=requests
   const [historyTab, setHistoryTabRaw] = useState(() => {
@@ -341,7 +342,7 @@ export default function App() {
                 onOpenSettings={() => setView("settings")}
               />
             ) : (
-              <HistoryList history={history} requests={requests} tab={historyTab} setTab={setHistoryTab} person={historyPerson} setPerson={setHistoryPerson}
+              <HistoryList history={history} requests={requests} tab={historyTab} setTab={setHistoryTab} person={historyPerson} setPerson={setHistoryPerson} query={historyQuery} setQuery={setHistoryQuery}
                 onOpen={setOpenEntryId}
                 selected={selectedHistory} setSelected={setSelectedHistory} />
             )}

@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { publicBase } from "../lib/payment.js";
+import { sectionTitle } from "./styles.js";
 
 // Chrome/Edge fire beforeinstallprompt once, often before React mounts, so capture it at module load
 let deferredPrompt = null;
@@ -44,7 +46,10 @@ export default function InstallBanner({ permanent = false, toast = false, title 
   }, []);
 
   const ios = isIOS();
-  if (isStandalone() || installedElsewhere || (!permanent && dismissed)) return null;
+  const installed = isStandalone() || installedElsewhere;
+  // Settings: once installed, the same spot invites sharing the app instead
+  if (installed && permanent) return <ShareAppCard title={title} />;
+  if (installed || (!permanent && dismissed)) return null;
   // Browsers without a one-tap prompt (Firefox, or Chrome before it offers one) only get the Settings hint
   if (!deferredPrompt && !ios && !permanent) return null;
 
@@ -88,4 +93,32 @@ export default function InstallBanner({ permanent = false, toast = false, title 
   );
   // Settings passes its section title, so the whole section disappears once the app is installed
   return title ? <>{title}<div style={{ marginBottom: 24 }}>{banner}</div></> : banner;
+}
+
+// Same card as the install banner, for sharing the app link with friends
+function ShareAppCard({ title }) {
+  const [copied, setCopied] = useState(false);
+  const url = publicBase() || location.href.split("#")[0];
+  const share = async () => {
+    const data = { title: "SplitEasy", text: "Split bills with SplitEasy. Free, no sign-up, works offline.", url };
+    if (navigator.share) {
+      try { await navigator.share(data); return; } catch (e) { if (e.name === "AbortError") return; }
+    }
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* clipboard unavailable */ }
+  };
+  return (
+    <>
+      {title && <div style={sectionTitle}>Share app</div>}
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 12, border: "1px solid var(--border)", borderRadius: 14, padding: "12px 14px", background: "var(--surface-2)" }}>
+        <img src="pwa-64x64.png" alt="" width="40" height="40" style={{ borderRadius: 10, flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>Share SplitEasy</div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, lineHeight: 1.4 }}>Send it to friends you split bills with</div>
+        </div>
+        <button onClick={share} style={{ border: "none", borderRadius: 10, padding: "8px 14px", background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          {copied ? "Copied" : <><ShareIcon /> Share</>}
+        </button>
+      </div>
+    </>
+  );
 }

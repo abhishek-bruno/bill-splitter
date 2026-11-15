@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { FooterReset, StickyFooter } from "../components/Footer.jsx";
 import { Sheet } from "../components/Sheet.jsx";
 import { ArrowLeftIcon, ArrowRightIcon, CameraIcon, EyeIcon, Icon, PencilIcon, PhotoIcon, ReceiptIcon } from "../components/icons.jsx";
-import { cardBtn, footerBackBtn, homeBtn, inputStyle, linkBtn } from "../components/styles.js";
+import { cardBtn, footerBackBtn, homeBtn, linkBtn } from "../components/styles.js";
 import { CURRENCIES } from "../lib/constants.js";
 import { loadScanPhoto, loadVisionConfig, readerLabel, storeScanPhoto } from "../lib/scanSettings.js";
 import { saveSecret } from "../lib/secureStore.js";
@@ -13,6 +13,7 @@ import { HomeHero } from "./HomeHero.jsx";
 import { ScanSetupSheet } from "./ScanSetup.jsx";
 import { TextField } from "../components/TextField.jsx";
 import { chargesToRows, formTotals, rowsToCharges } from "../lib/billForm.js";
+import { Select } from "../components/Select.jsx";
 
 // Example names for empty item rows, one per row, in keeping with the "e.g. Barbeque Nation" bill name
 export const ITEM_EXAMPLES = ["e.g. Non-veg buffet", "e.g. Veg buffet", "e.g. Mocktail", "e.g. Fresh lime soda", "e.g. Kulfi"];
@@ -463,10 +464,10 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
         </div>
         <div style={{ flex: 1 }}>
           {/* "₹ INR" explains itself, so no visible label; it lines up with the restaurant input */}
-          <select value={currency} onChange={e => setCurrency(e.target.value)} aria-label="Currency" style={{ ...inputStyle, cursor: "pointer" }}>
-            {!CURRENCIES.some(c => c.symbol === currency) && <option value={currency}>{currency}</option>}
-            {CURRENCIES.map(c => <option key={c.symbol} value={c.symbol}>{c.symbol} {c.code}</option>)}
-          </select>
+          <Select label="Currency" value={currency} onChange={setCurrency} options={[
+            ...(CURRENCIES.some(c => c.symbol === currency) ? [] : [{ value: currency, label: currency }]),
+            ...CURRENCIES.map(c => ({ value: c.symbol, label: `${c.symbol} ${c.code}` }))
+          ]} />
         </div>
       </div>
       <div style={{ fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Items</div>

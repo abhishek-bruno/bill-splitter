@@ -42,7 +42,7 @@ export function upiLink({ upiId, payeeName, amount, note }) {
 
 // Where pay.html lives for recipients: VITE_PUBLIC_URL (see .env), else this page when served over https.
 // A localhost link means nothing to the recipient, so without either there is no link.
-const publicBase = () => import.meta.env.VITE_PUBLIC_URL || (location.protocol === "https:" ? document.baseURI : null);
+export const publicBase = () => import.meta.env.VITE_PUBLIC_URL || (location.protocol === "https:" ? document.baseURI : null);
 
 // Messaging apps only linkify http(s) links, so point to a small page that shows the person's share,
 // the full split on request, and a UPI button when a UPI ID is set.

@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { SegTabs } from "../components/SegTabs.jsx";
 import { Sheet } from "../components/Sheet.jsx";
 import { ArrowUpRight, CheckIcon, LockIcon } from "../components/icons.jsx";
-import { inputStyle, labelStyle, linkBtn, outlineBtn } from "../components/styles.js";
+import { labelStyle, linkBtn, outlineBtn } from "../components/styles.js";
 import { useSwipeTabs } from "../hooks/useSwipeTabs.js";
 import { loadVisionKeys, rememberCloudKey } from "../lib/scanSettings.js";
 import { ENGINES, downloadEngine, isEngineReady } from "../scan/models.js";
 import { PROVIDERS, cleanApiKey, isLocalProvider, isValidApiKey } from "../scan/vision.js";
 import { TextField } from "../components/TextField.jsx";
+import { Select } from "../components/Select.jsx";
 
 export function CloudAiSettings({ config, savedKeys = {}, onSave, onCancel, heading = true, children }) {
   // Start on the active cloud provider, else one with a saved key, else Gemini
@@ -78,18 +79,15 @@ export function CloudAiSettings({ config, savedKeys = {}, onSave, onCancel, head
       <a href={p.keyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: 3, marginBottom: 14 }}>Get {/^[AEIOU]/i.test(p.label) ? "an" : "a"} {p.label} key <ArrowUpRight size={12} /></a>
 
       <label style={labelStyle}>Model</label>
-      <select
-        value={manualModel ? "__manual" : model}
-        onChange={e => {
-          if (e.target.value === "__manual") { setManualModel(true); return; }
-          setManualModel(false);
-          setModel(e.target.value);
-        }}
-        style={{ ...inputStyle, cursor: "pointer", marginBottom: manualModel ? 8 : 14 }}
-      >
-        {p.models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-        <option value="__manual">Enter manually…</option>
-      </select>
+      <div style={{ marginBottom: manualModel ? 8 : 14 }}>
+        <Select label="Model" value={manualModel ? "__manual" : model}
+          onChange={v => {
+            if (v === "__manual") { setManualModel(true); return; }
+            setManualModel(false);
+            setModel(v);
+          }}
+          options={[...p.models.map(m => ({ value: m.id, label: m.label })), { value: "__manual", label: "Enter manually…" }]} />
+      </div>
       {manualModel && (
         <TextField value={model} onChange={e => setModel(e.target.value)} placeholder={`Model ID, e.g. ${p.defaultModel}`} spellCheck={false} autoCapitalize="none" autoFocus style={{ marginBottom: 14 }} />
       )}
