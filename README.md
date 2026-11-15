@@ -21,7 +21,7 @@
 
 <p align="center">
   <img src="docs/screenshots/home.png" alt="Home screen" width="200" />
-  <img src="docs/screenshots/split.png" alt="Pick who had each item" width="200" />
+  <img src="docs/screenshots/split-overview.png" alt="Pick who had each item" width="200" />
   <img src="docs/screenshots/settle.png" alt="Everyone's share" width="200" />
   <img src="docs/screenshots/pay.png" alt="The page a friend opens to pay" width="200" />
 </p>
