@@ -30,12 +30,10 @@
 
 Splitting evenly is easy, but rarely fair. One person had the buffet, another had a mocktail, and the GST still has to be shared somehow. SplitEasy splits the bill **by item**, adds each person's part of the taxes and charges, and gives everyone a link to pay their exact amount.
 
-| | |
-|---|---|
-| **Fully local** | Your splits, history and saved people stay on your phone. No server, no tracking. |
-| **No sign-up** | Open it and start splitting. Friends don't need the app either. |
-| **Free forever** | No ads, no subscription, no limits. |
-| **Tracks who paid** | Every split is saved, with who has paid and what's left to collect. |
+- **No one else needs an app.** You don't have to get everyone onto the same splitting or payment app. Show a QR at the table, or share a link in the group you already have.
+- **Fully local.** Your splits, history and saved people stay on your phone. No server, no tracking.
+- **No sign-up.** Open it and start splitting. No account, email or phone number.
+- **Free forever.** No ads, no subscription, no limits.
 
 ### Nobody else has to install anything
 
