@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { AddPersonInput } from "../components/AddPersonInput.jsx";
 import { Avatar } from "../components/Avatar.jsx";
 import { ConfirmModal } from "../components/ConfirmModal.jsx";
 import { CheckIcon, PencilIcon, TrashIcon } from "../components/icons.jsx";
-import { card, inputStyle, labelStyle, outlineBtn, sectionTitle } from "../components/styles.js";
+import { card, labelStyle, outlineBtn, sectionTitle } from "../components/styles.js";
 import { COLORS } from "../lib/constants.js";
 import { maskKey } from "../lib/format.js";
 import { UPI_ID_PATTERN } from "../lib/payment.js";
@@ -14,6 +15,7 @@ import { PROVIDERS } from "../scan/vision.js";
 import { ScanSetupSheet } from "./ScanSetup.jsx";
 import { useAddPerson } from "../hooks/useAddPerson.jsx";
 import InstallBanner from "../components/InstallPrompt.jsx";
+import { TextField } from "../components/TextField.jsx";
 
 export function PaymentSettings({ payment, setPayment, flash }) {
   const [editing, setEditing] = useState(!payment?.upiId);
@@ -55,10 +57,10 @@ export function PaymentSettings({ payment, setPayment, flash }) {
         Shared payment messages for ₹ bills include a link that opens the friend's UPI app with your ID and their amount filled in.
       </div>
       <label style={labelStyle}>Your UPI ID</label>
-      <input value={upiId} onChange={e => setUpiId(e.target.value)} placeholder="name@okbank" autoComplete="off" autoCapitalize="none" spellCheck={false} style={{ ...inputStyle, marginBottom: 4 }} />
+      <TextField value={upiId} onChange={e => setUpiId(e.target.value)} placeholder="name@okbank" autoComplete="off" autoCapitalize="none" spellCheck={false} style={{ marginBottom: 4 }} />
       {upiId.trim() && !valid && <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 4 }}>Enter a UPI ID like name@okbank</div>}
       <label style={{ ...labelStyle, marginTop: 10 }}>Name shown to payers (optional)</label>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Abhishek" style={{ ...inputStyle, marginBottom: 14 }} />
+      <TextField value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Abhishek" style={{ marginBottom: 14 }} />
       <div style={{ display: "flex", gap: 8 }}>
         {payment?.upiId && <button onClick={() => { setUpiId(payment.upiId); setName(payment.name || ""); setEditing(false); }} style={outlineBtn()}>Cancel</button>}
         <button onClick={save} disabled={!valid} style={{
@@ -105,22 +107,11 @@ export function SavedPeopleSettings({ savedNames, setSavedNames, history = [], o
     }
   });
   const addRow = (
-    <div style={{ marginBottom: people.length ? 8 : 0 }}>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input ref={newInput} value={newName} onChange={e => { setNewName(e.target.value); setExists(""); adder.clearHint(); }}
-          onKeyDown={e => e.key === "Enter" && adder.submit(newName)}
-          placeholder="Add a person" aria-label="Add a person" autoComplete="off"
-          style={{ ...inputStyle, height: 36, padding: "0 12px", border: `1px solid ${exists ? "var(--danger)" : "var(--border)"}`, flex: 1, minWidth: 0 }} />
-        <button onClick={() => adder.submit(newName)} disabled={!newName.trim()} style={{
-          flex: "0 0 auto", height: 36, padding: "0 16px", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, fontFamily: "inherit",
-          background: newName.trim() ? "var(--accent)" : "var(--surface-2)", color: newName.trim() ? "#fff" : "var(--subtle)",
-          cursor: newName.trim() ? "pointer" : "default", transition: "background .15s"
-        }}>Add</button>
-      </div>
-      {exists && <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 4 }}>{exists}</div>}
-      {adder.hint && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, lineHeight: 1.4 }}>{adder.hint}</div>}
+    <>
+      <AddPersonInput value={newName} onChange={v => { setNewName(v); setExists(""); adder.clearHint(); }} onSubmit={adder.submit}
+        error={exists} hint={adder.hint} inputRef={newInput} style={{ marginBottom: people.length ? 8 : 0 }} />
       {adder.dialog}
-    </div>
+    </>
   );
 
   // Section heading, with Remove all at its right end (rare and destructive, so a quiet link)
@@ -155,9 +146,8 @@ export function SavedPeopleSettings({ savedNames, setSavedNames, history = [], o
               <>
                 {/* Same height as the name it replaces, so the list doesn't move; the error floats below */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <input value={draft} onChange={e => setDraft(e.target.value)} autoFocus aria-label={`New name for ${c.name}`}
-                    onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(null); }}
-                    style={{ ...inputStyle, height: 28, padding: "0 8px", fontWeight: 600, borderColor: taken ? "var(--danger)" : undefined }} />
+                  <TextField value={draft} onChange={e => setDraft(e.target.value)} autoFocus aria-label={`New name for ${c.name}`}
+                    onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(null); }} style={{ height: 28, padding: "0 8px", fontWeight: 600 }} error={taken} />
                   {taken && (
                     <div role="alert" style={{
                       position: "absolute", left: 38, top: "calc(100% - 6px)", zIndex: 1, fontSize: 12, color: "var(--danger)",

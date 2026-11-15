@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { AddPersonInput } from "../components/AddPersonInput.jsx";
 import { Avatar } from "../components/Avatar.jsx";
 import { useAddPerson } from "../hooks/useAddPerson.jsx";
 import { ArrowUpRight, ReceiptIcon } from "../components/icons.jsx";
@@ -58,19 +59,8 @@ export function PeopleStep({ people, setPeople, bill, savedNames, setSavedNames,
         </div>
       </div>
       <div style={{ fontWeight: 700, marginBottom: 12, color: "var(--text)" }}>Who's splitting this bill?</div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <input
-          value={name} onChange={e => setName(e.target.value)}
-          ref={input} onKeyDown={e => e.key === "Enter" && addTyped()}
-          placeholder="Enter name…" autoComplete="off"
-          style={{ flex: 1, minWidth: 0, border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", fontSize: 14, outline: "none", fontFamily: "inherit" }}
-        />
-        <button onClick={() => addTyped()} style={{
-          background: "var(--accent)", color: "#fff", border: "none",
-          borderRadius: 8, padding: "10px 18px", fontWeight: 600, cursor: "pointer", fontSize: 14
-        }}>Add</button>
-      </div>
-      {adder.hint && <div style={{ fontSize: 12, color: "var(--muted)", margin: "-4px 0 12px", lineHeight: 1.4 }}>{adder.hint}</div>}
+      <AddPersonInput value={name} onChange={v => { setName(v); adder.clearHint(); }} onSubmit={addTyped}
+        placeholder="Enter name…" label="Name" hint={adder.hint} inputRef={input} style={{ marginBottom: 12 }} />
       {adder.dialog}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {people.map((p, i) => (

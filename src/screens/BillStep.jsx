@@ -11,6 +11,8 @@ import { roundAdjust } from "../lib/totals.js";
 import { isLocalProvider, parseBillImage } from "../scan/vision.js";
 import { HomeHero } from "./HomeHero.jsx";
 import { ScanSetupSheet } from "./ScanSetup.jsx";
+import { TextField } from "../components/TextField.jsx";
+import { chargesToRows, formTotals, rowsToCharges } from "../lib/billForm.js";
 
 // Example names for empty item rows, one per row, in keeping with the "e.g. Barbeque Nation" bill name
 export const ITEM_EXAMPLES = ["e.g. Non-veg buffet", "e.g. Veg buffet", "e.g. Mocktail", "e.g. Fresh lime soda", "e.g. Kulfi"];
@@ -44,7 +46,7 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
   const [restaurant, setRestaurant] = useState(initial ? (initial.restaurant === "My Bill" ? "" : initial.restaurant || "") : start?.restaurant || "");
   const [currency, setCurrency] = useState(initial?.currency || start?.currency || "₹");
   const [items, setItems] = useState(() => toRows(initial?.items || start?.items, "1"));
-  const [taxes, setTaxes] = useState(() => toRows(initial?.taxes || start?.taxes, "t1"));
+  const [taxes, setTaxes] = useState(() => chargesToRows(initial?.taxes || start?.taxes, "t1"));
   // "equal" | "proportional", chosen on the Assign step. A new bill starts with the last choice made on this device.
   const [taxSplit] = useState(() => initial?.taxSplit || readPref(TAX_SPLIT_PREF) || "equal");
   // Round the total to the nearest rupee; a new bill starts with the last choice made on this device
@@ -117,7 +119,7 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
       setRestaurant(bill.restaurant);
       if (bill.currency) setCurrency(bill.currency);
       setItems(toRows(bill.items, "1"));
-      setTaxes(toRows(bill.taxes, "t1"));
+      setTaxes(chargesToRows(bill.taxes, "t1"));
       setScanCheck(bill.scanCheck || null);
       if (bill.roundOff) setRoundOffState(true); // the bill shows a round-off line
       setScanned(true);
@@ -145,6 +147,8 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
   const updateItem = (id, field, val) => setItems(prev => prev.map(x => x.id === id ? { ...x, [field]: val } : x));
 
   const addTax = () => { const row = blankItem(); setTaxes(prev => [...prev, row]); setFocusRowId(row.id); };
+  // A discount is a charge row taken off the bill: a fixed amount, or a percentage of the items (src/lib/billForm.js)
+  const addDiscount = () => { const row = { ...blankItem(), name: "Discount", discount: true }; setTaxes(prev => [...prev.filter(x => x.name.trim() || String(x.amount).trim()), row]); };
   const removeTax = (id) => setTaxes(prev => prev.length > 1 ? prev.filter(x => x.id !== id) : [blankItem()]);
   const updateTax = (id, field, val) => setTaxes(prev => prev.map(x => x.id === id ? { ...x, [field]: val } : x));
 
@@ -233,7 +237,7 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
     const src = d.from === "item" ? items : taxes;
     const row = src.find(r => r.id === d.id);
     if (!row) return;
-    if (target.to === "item" && parseFloat(row.amount) < 0) return; // a discount can't be an item
+    if (target.to === "item" && (row.discount || parseFloat(row.amount) < 0)) return; // a discount can't be an item
     const blank = (r) => !r.name.trim() && !String(r.amount).trim();
     if (target.to === d.from) {
       const rest = src.filter(r => r.id !== d.id);
@@ -267,9 +271,8 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
     const validItems = items.filter(i => i.name.trim() && parseFloat(i.amount) > 0)
       .map(i => ({ ...i, name: i.name.trim(), amount: parseFloat(i.amount) }));
     if (validItems.length === 0) { setError("Add at least one item with a name and amount."); return; }
-    // Charges can be negative (a discount)
-    const validTaxes = taxes.filter(t => t.name.trim() && parseFloat(t.amount) && !Number.isNaN(parseFloat(t.amount)))
-      .map(t => ({ ...t, name: t.name.trim(), amount: parseFloat(t.amount) }));
+    // Discounts become negative charges (a percentage is worked out from the items)
+    const validTaxes = rowsToCharges(taxes, validItems.reduce((s, i) => s + i.amount, 0));
     const raw = validItems.reduce((s, i) => s + i.amount, 0) + validTaxes.reduce((s, t) => s + t.amount, 0);
     const total = raw + roundAdjust({ items: validItems, taxes: validTaxes, roundOff });
     onDone({
@@ -432,6 +435,11 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
     );
   })();
 
+  // Row remove button: fixed width. Without it (a lone empty row) the amount field takes its space instead,
+  // so amounts always start in the same column and rows end at the same right edge as the buttons below
+  const removeBtn = { width: 18, flexShrink: 0, background: "none", border: "none", color: "var(--border-strong)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 0 };
+  const amountWidth = (hasRemove) => (hasRemove ? 116 : 116 + 8 + removeBtn.width);
+
   // Manual mode (also used to review scanned results)
   const manualValid = items.some(i => i.name.trim() && parseFloat(i.amount) > 0);
   return (
@@ -443,7 +451,7 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
         <div style={{ flex: 2 }}>
           <label style={{ display: "block", fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Bill name</label>
           <div style={{ position: "relative" }}>
-            <input value={restaurant} onChange={e => setRestaurant(e.target.value)} placeholder="e.g. Barbeque Nation" style={{ ...inputStyle, paddingRight: restaurant ? 34 : 12 }} />
+            <TextField value={restaurant} onChange={e => setRestaurant(e.target.value)} placeholder="e.g. Barbeque Nation" style={{ paddingRight: restaurant ? 34 : 12 }} />
             {restaurant && (
               <button onClick={() => setRestaurant("")} aria-label="Clear bill name" title="Clear" style={{
                 position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 24, height: 24,
@@ -466,22 +474,20 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
         {dropLine("item")}
         {items.map((item, idx) => (
           <div key={item.id} data-drag-row={item.id} onPointerDown={e => pressRow(e, "item", item.id)} style={{ display: "flex", gap: 8, alignItems: "center", WebkitTouchCallout: "none", ...dragRowStyle(item.id) }}>
-            <input
+            <TextField
               value={item.name} onChange={e => updateItem(item.id, "name", e.target.value)}
-              placeholder={ITEM_EXAMPLES[idx % ITEM_EXAMPLES.length]} data-row-name={item.id}
-              style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+              placeholder={ITEM_EXAMPLES[idx % ITEM_EXAMPLES.length]} data-row-name={item.id} style={{ flex: 1, minWidth: 0 }}
             />
-            <div style={{ position: "relative", flex: "0 0 116px" }}>
+            <div style={{ position: "relative", flex: `0 0 ${amountWidth(items.length > 1 || item.name || item.amount)}px` }}>
               <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--subtle)", fontSize: 13 }}>{currency}</span>
-              <input
+              <TextField
                 value={item.amount} onChange={e => updateItem(item.id, "amount", e.target.value)}
-                placeholder="0.00" type="number" inputMode="decimal" min="0" step="0.01"
-                style={{ ...inputStyle, paddingLeft: 24 }}
+                placeholder="0.00" type="number" inputMode="decimal" min="0" step="0.01" style={{ paddingLeft: 24 }}
               />
             </div>
-            {(items.length > 1 || item.name || item.amount) && (
-              <button onClick={() => removeItem(item.id)} style={{ background: "none", border: "none", color: "var(--border-strong)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}>×</button>
-            )}
+            {(items.length > 1 || item.name || item.amount)
+              ? <button onClick={() => removeItem(item.id)} aria-label="Remove item" style={removeBtn}>×</button>
+              : null}
           </div>
         ))}
       </div>
@@ -496,36 +502,48 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
         {dropLine("tax")}
         {taxes.map(tax => (
           <div key={tax.id} data-drag-row={tax.id} onPointerDown={e => pressRow(e, "tax", tax.id)} style={{ display: "flex", gap: 8, alignItems: "center", WebkitTouchCallout: "none", ...dragRowStyle(tax.id) }}>
-            <input
+            <TextField
               value={tax.name} onChange={e => updateTax(tax.id, "name", e.target.value)}
-              placeholder={`e.g. GST, Service Charge`} data-row-name={tax.id}
-              style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+              placeholder={tax.discount ? "e.g. Coupon, Happy hour" : "e.g. GST, Service Charge"} data-row-name={tax.id} style={{ flex: 1, minWidth: 0 }}
             />
-            <div style={{ position: "relative", flex: "0 0 116px" }}>
-              <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--subtle)", fontSize: 13 }}>{currency}</span>
-              <input
+            <div style={{ position: "relative", flex: `0 0 ${amountWidth(taxes.length > 1 || tax.name || tax.amount)}px` }}>
+              {/* Tap to switch between an amount and a percentage of the items (₹ / %, and −₹ / −% for a discount);
+                  one style for both, the minus sign tells them apart */}
+              <button onClick={() => updateTax(tax.id, "percent", !tax.percent)}
+                aria-label={`${tax.discount ? "Discount" : "Charge"} ${tax.percent ? "in percent. Switch to an amount" : "as an amount. Switch to percent"}`}
+                title="Switch between amount and percent" style={{
+                  position: "absolute", left: 4, top: "50%", transform: "translateY(-50%)", zIndex: 1, height: 26, minWidth: 30, padding: "0 6px",
+                  border: "none", borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                  background: "var(--accent-soft)", color: "var(--accent)"
+                }}>{tax.discount ? "−" : ""}{tax.percent ? "%" : currency}</button>
+              <TextField
                 value={tax.amount} onChange={e => updateTax(tax.id, "amount", e.target.value)}
-                placeholder="0.00" type="number" inputMode="decimal" step="0.01" title="Use a minus sign for a discount"
-                style={{ ...inputStyle, paddingLeft: 24 }}
+                placeholder={tax.percent ? (tax.discount ? "10" : "5") : "0.00"} type="number" inputMode="decimal" step="0.01" min={tax.discount ? "0" : undefined}
+                aria-label={`${tax.discount ? "Discount" : "Charge"} ${tax.percent ? "percent" : "amount"}`}
+                style={{ paddingLeft: tax.discount ? 42 : 40 }}
               />
             </div>
-            {(taxes.length > 1 || tax.name || tax.amount) && (
-              <button onClick={() => removeTax(tax.id)} style={{ background: "none", border: "none", color: "var(--border-strong)", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}>×</button>
-            )}
+            {(taxes.length > 1 || tax.name || tax.amount)
+              ? <button onClick={() => removeTax(tax.id)} aria-label={tax.discount ? "Remove discount" : "Remove charge"} style={removeBtn}>×</button>
+              : null}
           </div>
         ))}
       </div>
-      <button onClick={addTax} style={{
-        background: "none", border: "1.5px dashed var(--border-strong)", borderRadius: 8,
-        padding: "8px 14px", color: "var(--subtle)", cursor: "pointer", fontSize: 13,
-        width: "100%", marginBottom: 20
-      }}>+ Add charge</button>
+      {/* Charges are the common case, so that button is wider: it lines up with the name column, and
+          Add discount with the amount column (116px amount + gap + remove button) */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        {[["+ Add charge", addTax, { flex: 1 }], ["− Add discount", addDiscount, { flex: `0 0 ${amountWidth(false)}px` }]].map(([label, onClick, size]) => (
+          <button key={label} onClick={onClick} style={{
+            ...size, background: "none", border: "1.5px dashed var(--border-strong)", borderRadius: 8,
+            padding: "8px 10px", color: "var(--subtle)", cursor: "pointer", fontSize: 13, whiteSpace: "nowrap"
+          }}>{label}</button>
+        ))}
+      </div>
 
       {(() => {
         // Running total, to check against the paper bill
-        const itemSum = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
-        const chargeSum = taxes.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
-        const adj = roundOff ? Math.round((Math.round(itemSum + chargeSum) - (itemSum + chargeSum)) * 100) / 100 : 0;
+        const { itemsTotal: itemSum, charges: chargeSum, discounts, total: beforeRound } = formTotals(items, taxes);
+        const adj = roundOff ? Math.round((Math.round(beforeRound) - beforeRound) * 100) / 100 : 0;
         const fmt = (n) => `${n < 0 ? "−" : ""}${currency}${Math.abs(n).toFixed(2)}`;
         const row = (label, value, strong) => (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: strong ? 15 : 13, fontWeight: strong ? 700 : 400, color: strong ? "var(--text)" : "var(--muted)", padding: "3px 0" }}>
@@ -536,12 +554,13 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
           <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 14px", marginBottom: 20 }}>
             {row("Items", fmt(itemSum))}
             {chargeSum !== 0 && row("Shared charges", fmt(chargeSum))}
+            {discounts !== 0 && row("Discount", fmt(discounts))}
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--muted)", padding: "3px 0", cursor: "pointer" }}>
               <input type="checkbox" checked={roundOff} onChange={e => setRoundOff(e.target.checked)} style={{ accentColor: "var(--accent)", width: 16, height: 16, margin: 0 }} />
               <span style={{ flex: 1 }}>Round off</span>
               {roundOff && <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(adj)}</span>}
             </label>
-            <div style={{ borderTop: "1px solid var(--border)", marginTop: 6, paddingTop: 6 }}>{row("Total", fmt(itemSum + chargeSum + adj), true)}</div>
+            <div style={{ borderTop: "1px solid var(--border)", marginTop: 6, paddingTop: 6 }}>{row("Total", fmt(beforeRound + adj), true)}</div>
           </div>
         );
       })()}

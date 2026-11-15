@@ -7,6 +7,7 @@ import { useSwipeTabs } from "../hooks/useSwipeTabs.js";
 import { loadVisionKeys, rememberCloudKey } from "../lib/scanSettings.js";
 import { ENGINES, downloadEngine, isEngineReady } from "../scan/models.js";
 import { PROVIDERS, cleanApiKey, isLocalProvider, isValidApiKey } from "../scan/vision.js";
+import { TextField } from "../components/TextField.jsx";
 
 export function CloudAiSettings({ config, savedKeys = {}, onSave, onCancel, heading = true, children }) {
   // Start on the active cloud provider, else one with a saved key, else Gemini
@@ -65,10 +66,9 @@ export function CloudAiSettings({ config, savedKeys = {}, onSave, onCancel, head
       </div>
 
       <label style={labelStyle}>API key</label>
-      <input
+      <TextField
         type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-        placeholder={p.keyHint} autoComplete="off" spellCheck={false}
-        style={{ ...inputStyle, marginBottom: 4 }}
+        placeholder={p.keyHint} autoComplete="off" spellCheck={false} style={{ marginBottom: 4 }}
       />
       {keyInvalid && (
         <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 4 }}>
@@ -91,7 +91,7 @@ export function CloudAiSettings({ config, savedKeys = {}, onSave, onCancel, head
         <option value="__manual">Enter manually…</option>
       </select>
       {manualModel && (
-        <input value={model} onChange={e => setModel(e.target.value)} placeholder={`Model ID, e.g. ${p.defaultModel}`} spellCheck={false} autoCapitalize="none" autoFocus style={{ ...inputStyle, marginBottom: 14 }} />
+        <TextField value={model} onChange={e => setModel(e.target.value)} placeholder={`Model ID, e.g. ${p.defaultModel}`} spellCheck={false} autoCapitalize="none" autoFocus style={{ marginBottom: 14 }} />
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", background: "var(--surface-2)", borderRadius: 8, padding: "10px 12px", marginBottom: 16, lineHeight: 1.5 }}>

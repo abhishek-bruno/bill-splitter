@@ -59,6 +59,7 @@ Take a photo, and SplitEasy reads the items, prices, taxes and total. Check it, 
 - ☁️ **Cloud AI:** for messy bills, Gemini has a free tier
 - ⌨️ **Type it in:** quick, with a running total
 - ↕️ **Long-press** a row to reorder it, or move it into Shared Charges
+- 🏷️ **Charges and discounts** as an amount or a percentage
 
 <br clear="right" />
 
