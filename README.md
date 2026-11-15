@@ -30,9 +30,10 @@
 
 Splitting evenly is easy, but rarely fair. SplitEasy splits **by item**, shares the taxes fairly, and tells everyone exactly what they owe.
 
-| 🔒 Fully local | 🙅 No sign-up | 🎁 Free forever | 📴 Works offline |
-|:---:|:---:|:---:|:---:|
-| Your data stays on your phone | No account, email or number | No ads, no limits | Install it like an app |
+- 🔒 **Fully local:** your data stays on your phone
+- 🙅 **No sign-up:** no account, email or number
+- 🎁 **Free forever:** no ads, no limits
+- 📴 **Works offline:** install it like an app
 
 ## Nobody else has to install anything
 
