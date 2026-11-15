@@ -48,10 +48,6 @@ Other splitting apps need everyone on the same app. SplitEasy only needs the per
 
 ## How it works
 
-| 1. 📸 Snap | 2. 👆 Split | 3. 💸 Settle | 4. ✅ Track |
-|:---:|:---:|:---:|:---:|
-| Scan the bill or type it in | Tap who had each item | Share a link or show a QR | See who has paid |
-
 ### 📸 1. Snap the bill
 
 <img src="docs/screenshots/bill.png" alt="The bill, ready to check" width="220" align="right" />
