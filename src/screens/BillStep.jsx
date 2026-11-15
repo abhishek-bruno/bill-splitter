@@ -61,8 +61,9 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
   const [keySheet, setKeySheet] = useState(null);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [scanned, setScanned] = useState(!!start?.scanned);
-  const [scanCheck, setScanCheck] = useState(start?.scanCheck || null); // printed vs computed total
+  // Whether this bill came from a scan, so the photo card stays when coming back to this step
+  const [scanned, setScanned] = useState(initial ? !!initial.scan : !!start?.scanned);
+  const [scanCheck, setScanCheck] = useState((initial ? initial.scan?.check : start?.scanCheck) || null); // printed vs computed total
   const [online, setOnline] = useState(navigator.onLine);
   const cameraRef = useRef();
   const galleryRef = useRef();
@@ -284,7 +285,9 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
       // Keep a choice made on Assign since this form opened; a new bill uses the remembered one
       taxSplit: initial?.taxSplit || taxSplit,
       roundOff,
-      total
+      total,
+      // Only for the split in progress (History and links leave it out)
+      ...(scanned && { scan: { check: scanCheck } })
     });
   };
 
@@ -409,13 +412,14 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
     );
   }
 
+  const scanBtn = { ...cardBtn, gap: 4, padding: "5px 8px" };
   // Scanned bill card: photo thumbnail, whether it adds up, and Retake (camera) / Replace (pick a photo) / View
   const billCard = scanned && (() => {
     const warn = scanCheck && !scanCheck.matches;
     return (
-      <div style={{ display: "flex", gap: 12, alignItems: "center", border: `1px solid ${warn ? "var(--warn-border)" : "var(--border)"}`, background: warn ? "var(--warn-soft)" : "var(--surface-2)", borderRadius: 14, padding: 10, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", border: `1px solid ${warn ? "var(--warn-border)" : "var(--border)"}`, background: warn ? "var(--warn-soft)" : "var(--surface-2)", borderRadius: 14, padding: 10, marginBottom: 16 }}>
         {preview && (
-          <button onClick={() => setShowPhoto(true)} aria-label="View bill photo" style={{ flexShrink: 0, padding: 0, border: "none", background: "none", cursor: "pointer", borderRadius: 8, overflow: "hidden", width: 52, height: 64 }}>
+          <button onClick={() => setShowPhoto(true)} aria-label="View bill photo" style={{ flexShrink: 0, padding: 0, border: "none", background: "none", cursor: "pointer", borderRadius: 8, overflow: "hidden", width: 44, height: 56 }}>
             <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           </button>
         )}
@@ -426,10 +430,11 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
             <span>{warn ? `Adds up to ${currency}${scanSum.toFixed(2)}, bill says ${currency}${scanCheck.printedTotal.toFixed(2)}`
               : scanCheck?.matches ? "Matches the bill total" : "Scanned. Check against the bill"}</span>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <button onClick={() => cameraRef.current.click()} style={cardBtn}><CameraIcon size={15} /> Retake</button>
-            <button onClick={() => galleryRef.current.click()} style={cardBtn}><PhotoIcon size={15} /> Replace</button>
-            {lastFile && <button onClick={() => setShowPhoto(true)} style={cardBtn}><EyeIcon size={15} /> View</button>}
+          {/* Compact so all three fit on one line on most phones (wraps only on very narrow screens) */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <button onClick={() => cameraRef.current.click()} style={scanBtn}><CameraIcon size={14} /> Retake</button>
+            <button onClick={() => galleryRef.current.click()} style={scanBtn}><PhotoIcon size={14} /> Replace</button>
+            {lastFile && <button onClick={() => setShowPhoto(true)} style={scanBtn}><EyeIcon size={14} /> View</button>}
           </div>
         </div>
       </div>

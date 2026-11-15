@@ -125,11 +125,13 @@ export default function App() {
   useEffect(() => {
     if (step !== 3 || !bill) return;
     if (!splitId) { setSplitId(newSplitId()); return; }
+    // The scan details only matter to the bill form of the split in progress
+    const { scan: _scan, ...savedBill } = bill;
     setHistory(prev => {
       const existing = prev.find(e => e.id === splitId);
-      if (!existing) return [{ id: splitId, createdAt: Date.now(), bill, people, assignments, paid: {} }, ...prev];
-      if (JSON.stringify([existing.bill, existing.people, existing.assignments]) === JSON.stringify([bill, people, assignments])) return prev;
-      return prev.map(e => e.id === splitId ? { ...e, bill, people, assignments, updatedAt: Date.now() } : e);
+      if (!existing) return [{ id: splitId, createdAt: Date.now(), bill: savedBill, people, assignments, paid: {} }, ...prev];
+      if (JSON.stringify([existing.bill, existing.people, existing.assignments]) === JSON.stringify([savedBill, people, assignments])) return prev;
+      return prev.map(e => e.id === splitId ? { ...e, bill: savedBill, people, assignments, updatedAt: Date.now() } : e);
     });
   }, [step, bill, people, assignments, splitId, setHistory, setSplitId]);
 
