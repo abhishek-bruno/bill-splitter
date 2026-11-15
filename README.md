@@ -68,11 +68,12 @@ Long-press a row to reorder it, or drag an item into Shared Charges if the scann
 
 ### 2. Split it item by item
 
-<img src="docs/screenshots/split.png" alt="Tap who had each item" width="240" align="right" />
+<img src="docs/screenshots/split.png" alt="Mocktail split by quantity: Ravi had 1, Meera had 2" width="240" align="right" />
 
 Add the people at the table (your regulars are one tap away) and tap who had each item.
 
-- **Shared dishes** are split equally, or unevenly when someone had two portions.
+- **Shared dishes are split equally** among the people on them, by default.
+- **Split by quantity** when people had different amounts of the same item. Open the item and set how many each person had. For example, 3 mocktails for ₹500: Ravi had 1 and Meera had 2, so Ravi pays ₹166.67 and Meera pays ₹333.33. One tap on "Split equally again" undoes it.
 - **Taxes and service charge** are shared equally, or in proportion to what each person ordered.
 - **One tap** puts everyone on every item, so you only remove the exceptions.
 
