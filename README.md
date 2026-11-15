@@ -54,15 +54,15 @@ Other splitting apps need everyone on the same app. SplitEasy only needs the per
 
 ### 📸 1. Snap the bill
 
-<img src="docs/screenshots/bill.png" alt="The bill, ready to check" width="240" align="right" />
+<img src="docs/screenshots/bill.png" alt="The bill, ready to check" width="220" align="right" />
 
 Take a photo, and SplitEasy reads the items, prices, taxes and total. Check it, fix anything, done.
 
-| Read it with | What you get |
+| Read it with | Why |
 |---|---|
-| 📱 **On Device AI** | Free and private, works offline after a 50 MB download |
-| ☁️ **Cloud AI** | Your own API key (Google Gemini has a free tier), best for messy or handwritten bills |
-| ⌨️ **Type it in** | Quick for short bills, with a running total |
+| 📱 **On Device AI** | Free, private, works offline |
+| ☁️ **Cloud AI** | Messy bills, Gemini has a free tier |
+| ⌨️ **Type it in** | Quick, with a running total |
 
 - ↕️ **Long-press** a row to reorder it, or move it into Shared Charges.
 - 🧾 **Discounts and round-off** are handled.
@@ -71,16 +71,16 @@ Take a photo, and SplitEasy reads the items, prices, taxes and total. Check it, 
 
 ### 👆 2. Split it item by item
 
-<img src="docs/screenshots/split.png" alt="Mocktail split by quantity: Ravi had 1, Meera had 2" width="240" align="right" />
+<img src="docs/screenshots/split.png" alt="Mocktail split by quantity: Ravi had 1, Meera had 2" width="220" align="right" />
 
 Add the people at the table, then tap who had each item.
 
 | Option | How it splits |
 |---|---|
-| 🍽️ **Shared dishes** | Split equally among the people on them |
-| 🔢 **Split by quantity** | Set how many each person had |
-| 🧾 **Taxes and charges** | Shared equally, or by what each person ordered |
-| ⚡ **Everyone on all items** | One tap, then remove the exceptions |
+| 🍽️ **Shared dishes** | Split equally |
+| 🔢 **By quantity** | Set how many each had |
+| 🧾 **Taxes** | Equal, or by what each ordered |
+| ⚡ **Everyone** | One tap on all items |
 
 > **Example:** 3 mocktails for ₹500. Ravi had 1, Meera had 2, so Ravi pays **₹166.67** and Meera pays **₹333.33**.
 
@@ -88,16 +88,16 @@ Add the people at the table, then tap who had each item.
 
 ### 💸 3. Settle up
 
-<img src="docs/screenshots/settle.png" alt="Each person's share" width="240" align="right" />
+<img src="docs/screenshots/settle.png" alt="Each person's share" width="220" align="right" />
 
 See everyone's total, then collect your way:
 
 | Tap | To |
 |---|---|
-| 📷 **Show QR** | Let them scan and pay at the table |
-| 🔗 **Share payment link** | Send one person their share, on WhatsApp or any app |
-| 👥 **Share** | Send the whole split to the group |
-| ✅ **Mark as paid** | Tick people off as the money comes in |
+| 📷 **Show QR** | Scan and pay at the table |
+| 🔗 **Payment link** | Send one person their share |
+| 👥 **Share** | Send the whole split |
+| ✅ **Mark as paid** | As the money comes in |
 
 <br clear="right" />
 
