@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FooterReset, StickyFooter } from "../components/Footer.jsx";
 import { Sheet } from "../components/Sheet.jsx";
-import { ArrowLeftIcon, ArrowRightIcon, CameraIcon, Icon, PencilIcon, PhotoIcon, ReceiptIcon } from "../components/icons.jsx";
+import { ArrowLeftIcon, ArrowRightIcon, CameraIcon, EyeIcon, Icon, PencilIcon, PhotoIcon, ReceiptIcon } from "../components/icons.jsx";
 import { cardBtn, footerBackBtn, homeBtn, inputStyle, linkBtn } from "../components/styles.js";
 import { CURRENCIES } from "../lib/constants.js";
 import { loadScanPhoto, loadVisionConfig, readerLabel, storeScanPhoto } from "../lib/scanSettings.js";
@@ -405,7 +405,7 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
     );
   }
 
-  // Scanned bill card: photo thumbnail, whether it adds up, and Retake / View
+  // Scanned bill card: photo thumbnail, whether it adds up, and Retake (camera) / Replace (pick a photo) / View
   const billCard = scanned && (() => {
     const warn = scanCheck && !scanCheck.matches;
     return (
@@ -422,9 +422,10 @@ export function BillStep({ initial, onDone, onReset, keyVersion, mode, setMode, 
             <span>{warn ? `Adds up to ${currency}${scanSum.toFixed(2)}, bill says ${currency}${scanCheck.printedTotal.toFixed(2)}`
               : scanCheck?.matches ? "Matches the bill total" : "Scanned. Check against the bill"}</span>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <button onClick={() => cameraRef.current.click()} style={cardBtn}><CameraIcon size={15} /> Retake</button>
-            {lastFile && <button onClick={() => setShowPhoto(true)} style={cardBtn}><PhotoIcon size={15} /> View</button>}
+            <button onClick={() => galleryRef.current.click()} style={cardBtn}><PhotoIcon size={15} /> Replace</button>
+            {lastFile && <button onClick={() => setShowPhoto(true)} style={cardBtn}><EyeIcon size={15} /> View</button>}
           </div>
         </div>
       </div>

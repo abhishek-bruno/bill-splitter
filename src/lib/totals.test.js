@@ -96,3 +96,35 @@ describe("paidStatus", () => {
     expect(paidStatus(entry({ b: 1, c: 1 }))).toEqual({ paidCount: 2, total: 2, settled: true });
   });
 });
+
+import { personSummary, personInSplit } from "./totals.js";
+
+describe("one person across saved splits", () => {
+  const P = (name, contactId, id) => ({ id, name, contactId });
+  const entry = (people, assignments, paid = {}) => ({
+    bill: { items: [{ id: "x", name: "Meals", amount: 300 }], taxes: [], taxSplit: "equal" }, people, assignments, paid
+  });
+  const history = [
+    entry([P("Asha", "a", "1"), P("Ravi", "r", "2")], { x: ["1", "2"] }),             // Ravi owes 150
+    entry([P("Asha", "a", "1"), P("Ravi", "r", "2"), P("Meera", "m", "3")], { x: ["1", "2", "3"] }, { 2: 1 }), // paid
+    entry([P("Ravi", "r", "2"), P("Asha", "a", "1")], { x: ["1", "2"] }),             // Ravi paid this one
+    entry([P("Asha", "a", "1"), P("Meera", "m", "3")], { x: ["1", "3"] })             // Ravi not in it
+  ];
+
+  it("adds up what they still owe, and which splits they paid for", () => {
+    expect(personSummary(history, "r")).toEqual({ splits: 3, paidFor: 1, unpaidSplits: 1, owes: { "₹": 150 } });
+    expect(personSummary(history, "nobody")).toEqual({ splits: 0, paidFor: 0, unpaidSplits: 0, owes: {} });
+  });
+
+  it("keeps amounts in different currencies apart", () => {
+    const usd = { ...history[0], bill: { ...history[0].bill, currency: "$" } };
+    expect(personSummary([history[0], usd], "r").owes).toEqual({ "₹": 150, "$": 150 });
+  });
+
+  it("gives their share and status in one split", () => {
+    expect(personInSplit(history[0], "r")).toEqual({ share: 150, payer: false, paid: false });
+    expect(personInSplit(history[1], "r")).toEqual({ share: 100, payer: false, paid: true });
+    expect(personInSplit(history[2], "r")).toMatchObject({ payer: true, paid: true });
+    expect(personInSplit(history[3], "r")).toBeNull();
+  });
+});

@@ -66,6 +66,7 @@ src/
 | `src/lib/payment.js` | Share messages, pay page links, UPI links, share or copy |
 | `src/lib/requests.js` | Payment links opened on this device (written by the pay page, listed in History) |
 | `src/lib/storage.js` | localStorage hooks and keys for the split, history and preferences |
+| `src/lib/savedPeople.js` | Saved people with permanent ids: adding, matching a typed name, renaming everywhere, the one-time id upgrade |
 | `src/lib/routes.js` | Hash routes for each screen |
 | `src/lib/scanSettings.js` | Which reader is in use, saved Cloud AI keys, the last scanned photo |
 | `src/lib/secureStore.js` | Encrypts API keys in IndexedDB with a non-extractable key |
@@ -121,7 +122,7 @@ Bottom sheets add their own history entry, so Back closes the sheet rather than 
 
 | Where | Key | Holds |
 |---|---|---|
-| localStorage | `spliteasy:v1` | The split in progress, saved people, UPI ID, theme |
+| localStorage | `spliteasy:v1` | The split in progress, saved people (`{ id, name }`), UPI ID, theme |
 | localStorage | `spliteasy:history` | Saved splits (one is added when a split reaches Settle) |
 | localStorage | `spliteasy:requests` | Payment links opened on this device (written by `pay.html`) |
 | localStorage | `spliteasy:taxSplit`, `spliteasy:roundOff` | Last-used choices for new bills |
@@ -131,6 +132,10 @@ Bottom sheets add their own history entry, so Back closes the sheet rather than 
 | Cache Storage | `spliteasy-scan-photo` | A reduced copy of the last scanned photo, until the split is reset |
 
 The encryption keeps raw API keys out of plain storage, but any script running on the same origin could still use them. Keep the app free of third-party scripts.
+
+### Saved people
+
+Every saved person has a permanent id, and each person in a split records it as `contactId`. Renaming someone in Settings renames them in every saved split by that id, and the History filter groups splits by it. Removing someone from the saved list keeps the id in old splits, so typing their name again asks whether it's the same person and reconnects them. A different person needs a distinct name, so no split or message shows two people with one name. Data from before ids existed is upgraded on start, treating the same name as the same person (`assignContactIds`).
 
 ### Bill scanning
 

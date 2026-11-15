@@ -18,6 +18,7 @@ import { SettingsPage } from "./screens/Settings.jsx";
 import { SettleStep } from "./screens/SettleStep.jsx";
 import { SplitStep } from "./screens/SplitStep.jsx";
 import InstallBanner from "./components/InstallPrompt.jsx";
+import { assignContactIds, renameInHistory, renameInPeople } from "./lib/savedPeople.js";
 
 export default function App() {
   const [step, setStep] = usePersisted("step", 0);
@@ -39,6 +40,7 @@ export default function App() {
   const isDark = theme === "dark" || (theme === "system" && systemDark);
   const [splitId, setSplitId] = usePersisted("splitId", null);
   const [history, setHistory] = useStoredState(HISTORY_KEY, []);
+  const [historyPerson, setHistoryPerson] = useState(null); // History filtered to one person (contact id)
   const [requests, setRequests] = useStoredState(REQUESTS_KEY, []);
   // History has two lists: splits made here and requests received; the pay page links to ?tab=requests
   const [historyTab, setHistoryTabRaw] = useState(() => {
@@ -89,6 +91,24 @@ export default function App() {
     setStep(0); setBill(null); setPeople([]); setAssignments({}); setSplitId(null); setBillMode(null);
     setResetCount(n => n + 1); // remount BillStep so its draft form is cleared too
   };
+
+  // Renaming a saved person ({ id, name }) in Settings also renames them in saved splits and the split in
+  // progress. Returns how many saved splits changed.
+  const renamePerson = (contact, newName) => {
+    const { history: next, changed } = renameInHistory(history, contact, newName);
+    if (changed) setHistory(next);
+    const renamed = renameInPeople(people, contact, newName);
+    if (renamed !== people) setPeople(renamed);
+    return changed;
+  };
+
+  // Older data has no contact ids: give saved people and everyone in saved splits one, once, on start
+  useEffect(() => {
+    const fixed = assignContactIds({ savedNames, history, people });
+    if (fixed.savedNames !== savedNames) setSavedNames(fixed.savedNames);
+    if (fixed.history !== history) setHistory(fixed.history);
+    if (fixed.people !== people) setPeople(fixed.people);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only on start
 
   const eraseAll = () => {
     try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(HISTORY_KEY); localStorage.removeItem(REQUESTS_KEY); } catch { /* storage unavailable */ }
@@ -321,7 +341,7 @@ export default function App() {
                 onOpenSettings={() => setView("settings")}
               />
             ) : (
-              <HistoryList history={history} requests={requests} tab={historyTab} setTab={setHistoryTab}
+              <HistoryList history={history} requests={requests} tab={historyTab} setTab={setHistoryTab} person={historyPerson} setPerson={setHistoryPerson}
                 onOpen={setOpenEntryId}
                 selected={selectedHistory} setSelected={setSelectedHistory} />
             )}
@@ -337,6 +357,8 @@ export default function App() {
               onEraseAll={eraseAll}
               savedNames={savedNames}
               setSavedNames={setSavedNames}
+              history={history}
+              onRenamePerson={renamePerson}
               payment={payment}
               setPayment={setPayment}
               theme={theme}
@@ -352,7 +374,7 @@ export default function App() {
             key={resetCount} initial={bill} keyVersion={keyVersion} onReset={resetSplit}
             mode={billMode} setMode={setBillMode} onBack={() => { replaceNext.current = true; setBillMode(null); }}
             onDone={parsed => { setBill(parsed); setStep(1); }} />}
-          {step === 1 && <PeopleStep people={people} setPeople={setPeople} bill={bill} savedNames={savedNames} setSavedNames={setSavedNames}
+          {step === 1 && <PeopleStep people={people} setPeople={setPeople} bill={bill} savedNames={savedNames} setSavedNames={setSavedNames} history={history}
             onManageSaved={() => { setSettingsFocus("saved-people"); setView("settings"); }} />}
           {step === 2 && <SplitStep bill={bill} people={people} assignments={assignments} setAssignments={setAssignments}
             onTaxSplit={v => { setBill(b => ({ ...b, taxSplit: v })); writePref(TAX_SPLIT_PREF, v); }} />}

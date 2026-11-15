@@ -116,6 +116,7 @@ Every split is saved to **History** when you reach the result.
 
 - 📋 **"1 of 2 paid"** or **"Settled"** on every split
 - ✅ **Mark as paid**, with the date and Undo
+- 👤 **Filter by person** to see what they owe across all your splits
 - 🔁 **Remind** by sharing the link or QR again
 - 📥 **Requests** you received, in their own tab
 

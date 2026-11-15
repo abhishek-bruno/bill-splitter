@@ -70,3 +70,32 @@ export function paidStatus(entry) {
   const paidCount = debtors.filter(p => entry.paid?.[p.id]).length;
   return { paidCount, total: debtors.length, settled: debtors.length > 0 && paidCount === debtors.length };
 }
+
+// One person across saved splits (by contact id): how many splits they're in, how many they paid for
+// (the first person paid the bill), and what they still owe in the rest, per currency: { "₹": 150 }.
+export function personSummary(history, contactId) {
+  let splits = 0, paidFor = 0, unpaidSplits = 0;
+  const owes = {};
+  history.forEach(entry => {
+    const i = entry.people.findIndex(p => p.contactId === contactId);
+    if (i < 0) return;
+    splits++;
+    if (i === 0) { paidFor++; return; }
+    const person = entry.people[i];
+    const total = computeTotals(entry.bill, entry.people, entry.assignments)[i].total;
+    if (total >= 0.005 && !entry.paid?.[person.id]) {
+      unpaidSplits++;
+      const c = entry.bill.currency || "₹";
+      owes[c] = Math.round(((owes[c] || 0) + total) * 100) / 100;
+    }
+  });
+  return { splits, paidFor, unpaidSplits, owes };
+}
+
+// What one person owes in one saved split: { share, paid, payer }, or null when they're not in it
+export function personInSplit(entry, contactId) {
+  const i = entry.people.findIndex(p => p.contactId === contactId);
+  if (i < 0) return null;
+  const share = computeTotals(entry.bill, entry.people, entry.assignments)[i].total;
+  return { share, payer: i === 0, paid: i === 0 || share < 0.005 || !!entry.paid?.[entry.people[i].id] };
+}

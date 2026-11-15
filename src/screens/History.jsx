@@ -5,11 +5,53 @@ import { ArrowLeftIcon, CheckIcon, Icon } from "../components/icons.jsx";
 import { footerBackBtn } from "../components/styles.js";
 import { useSwipeTabs } from "../hooks/useSwipeTabs.js";
 import { formatDateTime } from "../lib/format.js";
-import { paidStatus } from "../lib/totals.js";
+import { historyContacts } from "../lib/savedPeople.js";
+import { paidStatus, personInSplit, personSummary } from "../lib/totals.js";
+import { COLORS } from "../lib/constants.js";
 import { SettleStep } from "./SettleStep.jsx";
 
+const money = (owes) => Object.entries(owes).map(([c, n]) => `${c}${n.toFixed(2)}`).join(" + ");
+
+// Pick a person to see only their splits, with what they still owe across them
+function PersonFilter({ contacts, person, setPerson }) {
+  const chip = (on) => ({
+    flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 600,
+    cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+    border: `1px solid ${on ? "var(--accent)" : "var(--border)"}`, background: on ? "var(--accent-soft)" : "var(--surface)", color: on ? "var(--accent)" : "var(--text-2)"
+  });
+  return (
+    <div role="group" aria-label="Filter by person" className="no-scrollbar" style={{ display: "flex", gap: 6, overflowX: "auto", margin: "0 -24px 12px", padding: "0 24px 2px" }}>
+      <button onClick={() => setPerson(null)} aria-pressed={!person} style={chip(!person)}>All</button>
+      {contacts.map((c, i) => (
+        <button key={c.id} onClick={() => setPerson(person === c.id ? null : c.id)} aria-pressed={person === c.id} style={chip(person === c.id)}>
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 4, background: COLORS[i % COLORS.length] }} />{c.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PersonSummary({ name, summary }) {
+  const owing = Object.keys(summary.owes).length > 0;
+  return (
+    <div style={{ border: "1px solid var(--border)", background: "var(--surface-2)", borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
+        {owing ? <>{name} owes <span style={{ color: "var(--warn-text)" }}>{money(summary.owes)}</span></> : `${name} is all settled up`}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+        {[
+          `In ${summary.splits} ${summary.splits === 1 ? "split" : "splits"}`,
+          owing && `${summary.unpaidSplits} unpaid`,
+          summary.paidFor > 0 && `paid the bill in ${summary.paidFor}`
+        ].filter(Boolean).join(" · ")}
+        {owing && ". Open a split to send a reminder."}
+      </div>
+    </div>
+  );
+}
+
 // Long-press a split to start selecting; while selecting, taps toggle instead of opening
-export function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, selected, setSelected }) {
+export function HistoryList({ history, requests = [], tab = "splits", setTab, onOpen, selected, setSelected, person = null, setPerson = () => {} }) {
   const selecting = selected.length > 0;
   const press = useRef(null); // { timer, x, y, fired }
   const toggle = (id) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -28,6 +70,10 @@ export function HistoryList({ history, requests = [], tab = "splits", setTab, on
     if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) clearTimeout(p.timer);
   };
   const swipe = useSwipeTabs(["splits", "requests"], tab, setTab);
+  // Filtering by person (by contact id); a person no longer in any split clears the filter
+  const contacts = historyContacts(history);
+  const personId = contacts.some(c => c.id === person) ? person : null;
+  const shown = personId ? history.filter(e => e.people.some(p => p.contactId === personId)) : history;
   const canSwipe = requests.length > 0 || tab === "requests";
   const tap = (id) => {
     if (press.current?.fired) { press.current.fired = false; return; } // the long-press already handled it
@@ -111,9 +157,12 @@ export function HistoryList({ history, requests = [], tab = "splits", setTab, on
           Splits are saved here automatically when you reach the summary.
         </div>
       )}
+      {contacts.length > 1 && <PersonFilter contacts={contacts} person={personId} setPerson={setPerson} />}
+      {personId && <PersonSummary name={contacts.find(c => c.id === personId).name} summary={personSummary(history, personId)} />}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {history.map(entry => {
+        {shown.map(entry => {
           const { paidCount, total, settled } = paidStatus(entry);
+          const theirs = personId && personInSplit(entry, personId);
           const isSel = selected.includes(entry.id);
           return (
             <button key={entry.id} onClick={() => tap(entry.id)}
@@ -136,13 +185,24 @@ export function HistoryList({ history, requests = [], tab = "splits", setTab, on
                 <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.bill.restaurant}</div>
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{formatDateTime(entry.createdAt)} · {entry.people.length} people</div>
               </div>
-              <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontWeight: 700, color: "var(--text)" }}>{entry.bill.currency}{entry.bill.total.toFixed(2)}</div>
-                <div style={{
-                  display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 700, borderRadius: 10, padding: "2px 8px",
-                  background: settled ? "var(--success-soft)" : "var(--warn-soft)", color: settled ? "var(--success-text)" : "var(--warn-text)"
-                }}>{settled ? "Settled" : `${paidCount} of ${total} paid`}</div>
-              </div>
+              {theirs ? (
+                // Filtered by a person: their share in this split
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontWeight: 700, color: "var(--text)" }}>{entry.bill.currency}{(theirs.payer ? entry.bill.total : theirs.share).toFixed(2)}</div>
+                  <div style={{
+                    display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 700, borderRadius: 10, padding: "2px 8px",
+                    background: theirs.paid ? "var(--success-soft)" : "var(--warn-soft)", color: theirs.paid ? "var(--success-text)" : "var(--warn-text)"
+                  }}>{theirs.payer ? "Paid the bill" : theirs.paid ? "Paid" : "To pay"}</div>
+                </div>
+              ) : (
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontWeight: 700, color: "var(--text)" }}>{entry.bill.currency}{entry.bill.total.toFixed(2)}</div>
+                  <div style={{
+                    display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 700, borderRadius: 10, padding: "2px 8px",
+                    background: settled ? "var(--success-soft)" : "var(--warn-soft)", color: settled ? "var(--success-text)" : "var(--warn-text)"
+                  }}>{settled ? "Settled" : `${paidCount} of ${total} paid`}</div>
+                </div>
+              )}
             </button>
           );
         })}

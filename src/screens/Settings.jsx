@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Avatar } from "../components/Avatar.jsx";
-import { CheckIcon } from "../components/icons.jsx";
+import { ConfirmModal } from "../components/ConfirmModal.jsx";
+import { CheckIcon, PencilIcon, TrashIcon } from "../components/icons.jsx";
 import { card, inputStyle, labelStyle, outlineBtn, sectionTitle } from "../components/styles.js";
 import { COLORS } from "../lib/constants.js";
 import { maskKey } from "../lib/format.js";
 import { UPI_ID_PATTERN } from "../lib/payment.js";
-import { asContact, forget } from "../lib/savedPeople.js";
+import { asContact, forget, remember, rename, sameName } from "../lib/savedPeople.js";
 import { forgetCloudKey, loadVisionConfig, loadVisionKeys, readerLabel } from "../lib/scanSettings.js";
 import { clearAllSecrets, deleteSecret, saveSecret } from "../lib/secureStore.js";
 import { ENGINES, isEngineReady, removeEngine } from "../scan/models.js";
 import { PROVIDERS } from "../scan/vision.js";
 import { ScanSetupSheet } from "./ScanSetup.jsx";
+import { useAddPerson } from "../hooks/useAddPerson.jsx";
 import InstallBanner from "../components/InstallPrompt.jsx";
 
 export function PaymentSettings({ payment, setPayment, flash }) {
@@ -68,7 +70,136 @@ export function PaymentSettings({ payment, setPayment, flash }) {
   );
 }
 
-export function SettingsPage({ onKeyChanged, onEraseAll, savedNames, setSavedNames, payment, setPayment, theme, setTheme, focus, onFocused }) {
+// Saved people: add someone, rename (pencil; also renames them in saved splits) or remove (trash) each one,
+// or clear them all
+export function SavedPeopleSettings({ savedNames, setSavedNames, history = [], onRenamePerson, flash }) {
+  const [editing, setEditing] = useState(null); // name being renamed
+  const [draft, setDraft] = useState("");
+  const [confirm, setConfirm] = useState(null); // { name } to remove one, or { all: true }
+  const people = savedNames.map(asContact);
+  const renamed = editing !== null ? rename(savedNames, editing, draft) : null;
+  const taken = editing !== null && draft.trim() !== "" && renamed === null;
+  const startEdit = (name) => { setEditing(name); setDraft(name); };
+  const save = () => {
+    if (!renamed) return;
+    setSavedNames(renamed);
+    const contact = people.find(c => sameName(c.name, editing));
+    const splits = onRenamePerson ? onRenamePerson(contact, draft) : 0;
+    setEditing(null);
+    flash(splits ? `Name updated here and in ${splits} saved ${splits === 1 ? "split" : "splits"}.` : "Name updated.");
+  };
+  const iconBtn = { background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", lineHeight: 1, padding: "4px 6px", display: "inline-flex" };
+
+  // Adding someone works as on the People step (asks when the name is in earlier splits)
+  const [newName, setNewName] = useState("");
+  const [exists, setExists] = useState("");
+  const newInput = useRef(null);
+  const adder = useAddPerson({
+    savedNames, history, inputRef: newInput,
+    onAdd: (contact, kind) => {
+      if (kind === "saved") { setExists(`${contact.name} is already saved`); return false; }
+      setSavedNames(prev => remember(prev, [contact]));
+      setNewName("");
+      flash(`${contact.name} saved.`);
+      return true;
+    }
+  });
+  const addRow = (
+    <div style={{ marginBottom: people.length ? 8 : 0 }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input ref={newInput} value={newName} onChange={e => { setNewName(e.target.value); setExists(""); adder.clearHint(); }}
+          onKeyDown={e => e.key === "Enter" && adder.submit(newName)}
+          placeholder="Add a person" aria-label="Add a person" autoComplete="off"
+          style={{ ...inputStyle, height: 36, padding: "0 12px", border: `1px solid ${exists ? "var(--danger)" : "var(--border)"}`, flex: 1, minWidth: 0 }} />
+        <button onClick={() => adder.submit(newName)} disabled={!newName.trim()} style={{
+          flex: "0 0 auto", height: 36, padding: "0 16px", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, fontFamily: "inherit",
+          background: newName.trim() ? "var(--accent)" : "var(--surface-2)", color: newName.trim() ? "#fff" : "var(--subtle)",
+          cursor: newName.trim() ? "pointer" : "default", transition: "background .15s"
+        }}>Add</button>
+      </div>
+      {exists && <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 4 }}>{exists}</div>}
+      {adder.hint && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, lineHeight: 1.4 }}>{adder.hint}</div>}
+      {adder.dialog}
+    </div>
+  );
+
+  // Section heading, with Remove all at its right end (rare and destructive, so a quiet link)
+  const heading = (
+    <div id="saved-people" style={{ ...sectionTitle, scrollMarginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+      <span>Saved people</span>
+      {people.length > 0 && (
+        <button onClick={() => setConfirm({ all: true })} style={{ background: "none", border: "none", padding: 0, fontSize: 13, fontWeight: 600, color: "var(--danger)", cursor: "pointer", fontFamily: "inherit" }}>Remove all</button>
+      )}
+    </div>
+  );
+
+  if (people.length === 0) return (
+    <>
+      {heading}
+      <div style={card}>
+        <div style={{ fontSize: 14, color: "var(--muted)", marginBottom: 12 }}>People you add to a split are kept on this device and suggested next time.</div>
+        {addRow}
+      </div>
+    </>
+  );
+  return (
+    <>
+    {heading}
+    <div style={card}>
+      {addRow}
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {people.map((c, i) => (
+          <div key={c.id || c.name} style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid var(--divider)" : "none" }}>
+            <Avatar name={editing === c.name ? draft || c.name : c.name} color={COLORS[i % COLORS.length]} size={28} />
+            {editing === c.name ? (
+              <>
+                {/* Same height as the name it replaces, so the list doesn't move; the error floats below */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input value={draft} onChange={e => setDraft(e.target.value)} autoFocus aria-label={`New name for ${c.name}`}
+                    onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(null); }}
+                    style={{ ...inputStyle, height: 28, padding: "0 8px", fontWeight: 600, borderColor: taken ? "var(--danger)" : undefined }} />
+                  {taken && (
+                    <div role="alert" style={{
+                      position: "absolute", left: 38, top: "calc(100% - 6px)", zIndex: 1, fontSize: 12, color: "var(--danger)",
+                      background: "var(--surface)", border: "1px solid var(--danger-border)", borderRadius: 6, padding: "2px 8px", boxShadow: "0 4px 12px #0001"
+                    }}>{draft.trim()} is already saved</div>
+                  )}
+                </div>
+                <button onClick={save} disabled={!renamed} aria-label="Save name" style={{ ...iconBtn, color: renamed ? "var(--accent)" : "var(--border-strong)", cursor: renamed ? "pointer" : "default" }}><CheckIcon size={18} /></button>
+                <button onClick={() => setEditing(null)} aria-label="Cancel" style={{ ...iconBtn, fontSize: 20 }}>×</button>
+              </>
+            ) : (
+              <>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                <button onClick={() => startEdit(c.name)} aria-label={`Rename ${c.name}`} style={iconBtn}><PencilIcon size={15} /></button>
+                <button onClick={() => setConfirm({ name: c.name })} aria-label={`Remove ${c.name}`} title="Remove" style={{ ...iconBtn, color: "var(--danger)" }}><TrashIcon size={16} /></button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      {/* Removing only stops the suggestions; saved splits keep their names */}
+      {confirm && (
+        <ConfirmModal
+          title={confirm.all ? "Remove all saved people?" : `Remove ${confirm.name}?`}
+          message={confirm.all
+            ? "They won't be suggested when you add people. Your saved splits keep their names."
+            : `${confirm.name} won't be suggested when you add people. Your saved splits keep the name.`}
+          confirmLabel={confirm.all ? "Remove all" : "Remove"}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => {
+            if (confirm.all) { setSavedNames([]); flash("All saved people removed."); }
+            else { setSavedNames(prev => forget(prev, confirm.name)); flash(`${confirm.name} removed from saved people.`); }
+            setConfirm(null);
+          }}
+        />
+      )}
+    </div>
+    </>
+  );
+}
+
+export function SettingsPage({ onKeyChanged, onEraseAll, savedNames, setSavedNames, history, onRenamePerson, payment, setPayment, theme, setTheme, focus, onFocused }) {
   // Opened from a shortcut (e.g. Saved > Manage): jump to that section once
   useEffect(() => {
     if (!focus) return;
@@ -196,25 +327,7 @@ export function SettingsPage({ onKeyChanged, onEraseAll, savedNames, setSavedNam
         })()}
       </div>
 
-      <div id="saved-people" style={{ ...sectionTitle, scrollMarginTop: 16 }}>Saved people</div>
-      <div style={card}>
-        {savedNames.length === 0 ? (
-          <div style={{ fontSize: 14, color: "var(--muted)" }}>People you add to a split are kept on this device and suggested next time.</div>
-        ) : (
-          <>
-            <div style={{ display: "flex", flexDirection: "column", marginBottom: 12 }}>
-              {savedNames.map(asContact).map((c, i) => (
-                <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid var(--divider)" : "none" }}>
-                  <Avatar name={c.name} color={COLORS[i % COLORS.length]} size={28} />
-                  <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{c.name}</span>
-                  <button onClick={() => setSavedNames(prev => forget(prev, c.name))} aria-label={`Forget ${c.name}`} style={{ background: "none", border: "none", color: "var(--subtle)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: "2px 6px" }}>×</button>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => { if (window.confirm("Forget all saved people?")) { setSavedNames([]); flash("Saved people cleared."); } }} style={{ ...outlineBtn("var(--danger)", "var(--danger-border)"), width: "100%" }}>Clear all saved people</button>
-          </>
-        )}
-      </div>
+      <SavedPeopleSettings savedNames={savedNames} setSavedNames={setSavedNames} history={history} onRenamePerson={onRenamePerson} flash={flash} />
 
       <div style={sectionTitle}>Data on this device</div>
       <div style={card}>

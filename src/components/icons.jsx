@@ -38,8 +38,10 @@ export const PencilIcon = (p) => <Glyph {...p}><path d="M4 20h4L18.5 9.5a2.8 2.8
 export const CameraIcon = (p) => <Glyph {...p}><path d="M5 7h1a2 2 0 0 0 2-2 1 1 0 0 1 1-1h6a1 1 0 0 1 1 1 2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2" /><circle cx="12" cy="13" r="3" /></Glyph>;
 
 export const PhotoIcon = (p) => <Glyph {...p}><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="m21 15-5-5L5 20" /></Glyph>;
+export const EyeIcon = (p) => <Glyph {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></Glyph>;
 
 export const LockIcon = (p) => <Glyph {...p}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 1 1 8 0v4" /></Glyph>;
+export const TrashIcon = (p) => <Glyph {...p}><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" /></Glyph>;
 
 // Share (three connected dots) and QR code glyphs for the summary buttons
 export function ShareIcon({ size = 15 }) {
