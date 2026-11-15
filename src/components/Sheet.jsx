@@ -1,8 +1,5 @@
-// PayQrSheet: a UPI QR for one person's share, to scan with any UPI app at the table
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import qrcode from "qrcode-generator";
-import { upiLink } from "./payment.js";
 
 // Back (browser, Android or a swipe gesture) closes the open sheet only: each sheet adds a history entry,
 // and closing it any other way (×, Esc, tap outside) goes back through that entry, so none is left behind
@@ -19,6 +16,7 @@ if (typeof window !== "undefined") {
   });
 }
 
+// Bottom sheet on phones, centred modal on wide screens; used for every sheet in the app
 export function Sheet({ title, onClose, children }) {
   const id = useRef(null);
   if (!id.current) id.current = `s${Math.random().toString(36).slice(2, 9)}`;
@@ -60,42 +58,5 @@ export function Sheet({ title, onClose, children }) {
       </div>
     </div>,
     document.body
-  );
-}
-
-// Crisp SVG QR code. Always dark-on-white with a quiet zone, so scanners read it in dark mode too.
-function QrCode({ value, size = 240 }) {
-  const { path, count } = useMemo(() => {
-    const qr = qrcode(0, "M");
-    qr.addData(value);
-    qr.make();
-    const n = qr.getModuleCount();
-    let d = "";
-    for (let r = 0; r < n; r++)
-      for (let c = 0; c < n; c++)
-        if (qr.isDark(r, c)) d += `M${c + 4} ${r + 4}h1v1h-1z`;
-    return { path: d, count: n + 8 };
-  }, [value]);
-
-  return (
-    <svg viewBox={`0 0 ${count} ${count}`} width={size} height={size} shapeRendering="crispEdges"
-      role="img" aria-label="UPI payment QR code" style={{ display: "block", background: "#fff", borderRadius: 12 }}>
-      <path d={path} fill="#000" />
-    </svg>
-  );
-}
-
-export function PayQrSheet({ person, request, onClose }) {
-  return (
-    <Sheet title="Scan to pay" onClose={onClose}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-        <div style={{ fontSize: 32, fontWeight: 800 }}>₹{request.amount.toFixed(2)}</div>
-        <div style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 16px" }}>to {request.payeeName} · {request.upiId}</div>
-        <QrCode value={upiLink(request)} />
-        <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 16, maxWidth: 300 }}>
-          Works with any UPI app.
-        </div>
-      </div>
-    </Sheet>
   );
 }

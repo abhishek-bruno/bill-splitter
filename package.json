@@ -5,12 +5,16 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "check": "npm run lint && npm test && npm run build",
     "icons": "pwa-assets-generator"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Split restaurant bills by item, fully on your phone, and collect with UPI links.",
   "private": "true",
   "type": "module",
   "dependencies": {
@@ -21,9 +25,15 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@vite-pwa/assets-generator": "^1.0.4",
     "@vitejs/plugin-react": "^6.1.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
     "vite": "^8.3.1",
-    "vite-plugin-pwa": "^1.3.0"
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^5.1.0"
   }
 }

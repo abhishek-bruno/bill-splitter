@@ -1,0 +1,280 @@
+[
+  {
+    "name": "demo uneven, INR with UPI",
+    "bill": {
+      "restaurant": "Barbeque Nation",
+      "currency": "₹",
+      "taxSplit": "equal",
+      "roundOff": false,
+      "total": 3192,
+      "items": [
+        {
+          "id": "i1",
+          "name": "Non-veg buffet",
+          "amount": 1600
+        },
+        {
+          "id": "i2",
+          "name": "Veg buffet",
+          "amount": 700
+        },
+        {
+          "id": "i3",
+          "name": "Mocktail",
+          "amount": 500
+        },
+        {
+          "id": "i4",
+          "name": "Kulfi",
+          "amount": 240
+        }
+      ],
+      "taxes": [
+        {
+          "id": "t1",
+          "name": "CGST 2.5%",
+          "amount": 76
+        },
+        {
+          "id": "t2",
+          "name": "SGST 2.5%",
+          "amount": 76
+        }
+      ]
+    },
+    "people": [
+      {
+        "id": "p1",
+        "name": "Asha"
+      },
+      {
+        "id": "p2",
+        "name": "Ravi"
+      },
+      {
+        "id": "p3",
+        "name": "Meera"
+      }
+    ],
+    "assignments": {
+      "i1": [
+        "p1",
+        "p2"
+      ],
+      "i2": [
+        "p3"
+      ],
+      "i3": [
+        "p2",
+        "p3",
+        "p3"
+      ],
+      "i4": [
+        "p1",
+        "p2",
+        "p3"
+      ]
+    },
+    "payment": {
+      "upiId": "asha@example",
+      "name": "Asha"
+    },
+    "paid": {},
+    "expected": {
+      "links": {
+        "group": "Mh5CYXJiZXF1ZSBOYXRpb24eHh5hc2hhQGV4YW1wbGUeLR5Bc2hhHVJhdmkdTWVlcmEeTm9uLXZlZyBidWZmZXQfMTYwMB8zHVZlZyBidWZmZXQfNzAwHzQdTW9ja3RhaWwfNTAwHzYfMS4yHUt1bGZpHzI0MB8eQ0dTVCAyLjUlHzc2HVNHU1QgMi41JR83Ng",
+        "p1": "Mh5CYXJiZXF1ZSBOYXRpb24eHh5hc2hhQGV4YW1wbGUeMB5Bc2hhHVJhdmkdTWVlcmEeTm9uLXZlZyBidWZmZXQfMTYwMB8zHVZlZyBidWZmZXQfNzAwHzQdTW9ja3RhaWwfNTAwHzYfMS4yHUt1bGZpHzI0MB8eQ0dTVCAyLjUlHzc2HVNHU1QgMi41JR83Ng",
+        "p2": "Mh5CYXJiZXF1ZSBOYXRpb24eHh5hc2hhQGV4YW1wbGUeMR5Bc2hhHVJhdmkdTWVlcmEeTm9uLXZlZyBidWZmZXQfMTYwMB8zHVZlZyBidWZmZXQfNzAwHzQdTW9ja3RhaWwfNTAwHzYfMS4yHUt1bGZpHzI0MB8eQ0dTVCAyLjUlHzc2HVNHU1QgMi41JR83Ng",
+        "p3": "Mh5CYXJiZXF1ZSBOYXRpb24eHh5hc2hhQGV4YW1wbGUeMh5Bc2hhHVJhdmkdTWVlcmEeTm9uLXZlZyBidWZmZXQfMTYwMB8zHVZlZyBidWZmZXQfNzAwHzQdTW9ja3RhaWwfNTAwHzYfMS4yHUt1bGZpHzI0MB8eQ0dTVCAyLjUlHzc2HVNHU1QgMi41JR83Ng"
+      },
+      "groupText": "<LINK>\n\nHi all, here are the shares of the Barbeque Nation bill (₹3192.00, paid by Asha):\n\nRavi: *₹0.00*\nMeera: *₹0.00*\n\nOpen the link to pay by UPI or see the full bill."
+    }
+  },
+  {
+    "name": "proportional, round off, discount, someone paid, no UPI",
+    "bill": {
+      "restaurant": "Kadavu",
+      "currency": "₹",
+      "taxSplit": "proportional",
+      "roundOff": true,
+      "total": 803,
+      "items": [
+        {
+          "id": "a",
+          "name": "Chicken Meals",
+          "amount": 210
+        },
+        {
+          "id": "b",
+          "name": "Biryani",
+          "amount": 250
+        },
+        {
+          "id": "c",
+          "name": "Kadala Curry",
+          "amount": 130
+        },
+        {
+          "id": "d",
+          "name": "Appam (1 Pc)",
+          "amount": 75
+        },
+        {
+          "id": "e",
+          "name": "Lemon Soda",
+          "amount": 100
+        }
+      ],
+      "taxes": [
+        {
+          "id": "t1",
+          "name": "GST @2.5%",
+          "amount": 19.12
+        },
+        {
+          "id": "t2",
+          "name": "GST @2.5%",
+          "amount": 19.12
+        },
+        {
+          "id": "t3",
+          "name": "Discount",
+          "amount": -10
+        }
+      ]
+    },
+    "people": [
+      {
+        "id": "x",
+        "name": "Dev"
+      },
+      {
+        "id": "y",
+        "name": "Nila"
+      },
+      {
+        "id": "z",
+        "name": "Joe"
+      },
+      {
+        "id": "w",
+        "name": "Sam"
+      }
+    ],
+    "assignments": {
+      "a": [
+        "x"
+      ],
+      "b": [
+        "y",
+        "z"
+      ],
+      "c": [
+        "x",
+        "y",
+        "z",
+        "w"
+      ],
+      "d": [
+        "w",
+        "w",
+        "z"
+      ],
+      "e": [
+        "x",
+        "w"
+      ]
+    },
+    "payment": null,
+    "paid": {
+      "z": 1763000000000
+    },
+    "expected": {
+      "links": {
+        "group": "Mh5LYWRhdnUeHh4eLR5EZXYdTmlsYR1Kb2UdU2FtHkNoaWNrZW4gTWVhbHMfMjEwHzEdQmlyeWFuaR8yNTAfNh1LYWRhbGEgQ3VycnkfMTMwHx1BcHBhbSAoMSBQYykfNzUfYx8xLjIdTGVtb24gU29kYR8xMDAfOR5HU1QgQDIuNSUfMTkuMTIdR1NUIEAyLjUlHzE5LjEyHURpc2NvdW50Hy0xMB40HnAeMQ",
+        "x": "Mh5LYWRhdnUeHh4eMB5EZXYdTmlsYR1Kb2UdU2FtHkNoaWNrZW4gTWVhbHMfMjEwHzEdQmlyeWFuaR8yNTAfNh1LYWRhbGEgQ3VycnkfMTMwHx1BcHBhbSAoMSBQYykfNzUfYx8xLjIdTGVtb24gU29kYR8xMDAfOR5HU1QgQDIuNSUfMTkuMTIdR1NUIEAyLjUlHzE5LjEyHURpc2NvdW50Hy0xMB40HnAeMQ",
+        "y": "Mh5LYWRhdnUeHh4eMR5EZXYdTmlsYR1Kb2UdU2FtHkNoaWNrZW4gTWVhbHMfMjEwHzEdQmlyeWFuaR8yNTAfNh1LYWRhbGEgQ3VycnkfMTMwHx1BcHBhbSAoMSBQYykfNzUfYx8xLjIdTGVtb24gU29kYR8xMDAfOR5HU1QgQDIuNSUfMTkuMTIdR1NUIEAyLjUlHzE5LjEyHURpc2NvdW50Hy0xMB40HnAeMQ",
+        "z": "Mh5LYWRhdnUeHh4eMh5EZXYdTmlsYR1Kb2UdU2FtHkNoaWNrZW4gTWVhbHMfMjEwHzEdQmlyeWFuaR8yNTAfNh1LYWRhbGEgQ3VycnkfMTMwHx1BcHBhbSAoMSBQYykfNzUfYx8xLjIdTGVtb24gU29kYR8xMDAfOR5HU1QgQDIuNSUfMTkuMTIdR1NUIEAyLjUlHzE5LjEyHURpc2NvdW50Hy0xMB40HnAeMQ",
+        "w": "Mh5LYWRhdnUeHh4eMx5EZXYdTmlsYR1Kb2UdU2FtHkNoaWNrZW4gTWVhbHMfMjEwHzEdQmlyeWFuaR8yNTAfNh1LYWRhbGEgQ3VycnkfMTMwHx1BcHBhbSAoMSBQYykfNzUfYx8xLjIdTGVtb24gU29kYR8xMDAfOR5HU1QgQDIuNSUfMTkuMTIdR1NUIEAyLjUlHzE5LjEyHURpc2NvdW50Hy0xMB40HnAeMQ"
+      },
+      "groupText": "<LINK>\n\nHi all, here are the shares of the Kadavu bill (₹803.00, paid by Dev):\n\nNila: *₹0.00*\nJoe: ₹0.00 ✓ paid\nSam: *₹0.00*\n\nOpen the link to see the full bill."
+    }
+  },
+  {
+    "name": "USD, payee not first, odd names, unassigned item",
+    "bill": {
+      "restaurant": "Joe's Diner & Bar",
+      "currency": "$",
+      "taxSplit": "equal",
+      "roundOff": false,
+      "total": 64.5,
+      "items": [
+        {
+          "id": "q",
+          "name": "Burger | double",
+          "amount": 18.5
+        },
+        {
+          "id": "r",
+          "name": "Fries",
+          "amount": 6
+        },
+        {
+          "id": "s",
+          "name": "Shake ×2",
+          "amount": 12
+        },
+        {
+          "id": "u",
+          "name": "Nobody's pie",
+          "amount": 8
+        }
+      ],
+      "taxes": [
+        {
+          "id": "tx",
+          "name": "Tip 15%",
+          "amount": 20
+        }
+      ]
+    },
+    "people": [
+      {
+        "id": "m",
+        "name": "Mia"
+      },
+      {
+        "id": "n",
+        "name": "Noah O'Brien"
+      }
+    ],
+    "assignments": {
+      "q": [
+        "m"
+      ],
+      "r": [
+        "m",
+        "n"
+      ],
+      "s": [
+        "n",
+        "n",
+        "m"
+      ],
+      "u": []
+    },
+    "payment": {
+      "upiId": "",
+      "name": "Noah"
+    },
+    "paid": {},
+    "expected": {
+      "links": {
+        "group": "Mh5Kb2UncyBEaW5lciAmIEJhch4kHk5vYWgeHi0eTWlhHU5vYWggTydCcmllbh5CdXJnZXIgfCBkb3VibGUfMTguNR8xHUZyaWVzHzYfHVNoYWtlIMOXMh8xMh8fMS4yHU5vYm9keSdzIHBpZR84HzAeVGlwIDE1JR8yMA",
+        "m": "Mh5Kb2UncyBEaW5lciAmIEJhch4kHk5vYWgeHjAeTWlhHU5vYWggTydCcmllbh5CdXJnZXIgfCBkb3VibGUfMTguNR8xHUZyaWVzHzYfHVNoYWtlIMOXMh8xMh8fMS4yHU5vYm9keSdzIHBpZR84HzAeVGlwIDE1JR8yMA",
+        "n": "Mh5Kb2UncyBEaW5lciAmIEJhch4kHk5vYWgeHjEeTWlhHU5vYWggTydCcmllbh5CdXJnZXIgfCBkb3VibGUfMTguNR8xHUZyaWVzHzYfHVNoYWtlIMOXMh8xMh8fMS4yHU5vYm9keSdzIHBpZR84HzAeVGlwIDE1JR8yMA"
+      },
+      "groupText": "<LINK>\n\nHi all, here are the shares of the Joe's Diner & Bar bill ($64.50, paid by Mia):\n\nNoah O'Brien: *$0.00*\n\nOpen the link to see the full bill."
+    }
+  }
+]

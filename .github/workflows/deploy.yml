@@ -24,6 +24,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # A failing check stops the deploy, so the live site never gets broken code
+      - run: npm run lint
+      - run: npm test
       - run: npm run build
         env:
           # Repo Settings > Secrets and variables > Actions > Variables. If unset, links use the site's own URL.

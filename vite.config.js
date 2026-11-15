@@ -14,6 +14,8 @@ export default defineConfig(({ mode }) => {
     define: { __APP_BUILD__: JSON.stringify(APP_BUILD) },
     build: {
       rollupOptions: {
+        // Two pages: the app, and the page friends open from a payment link
+        input: { main: "index.html", pay: "pay.html" },
         output: {
           // Keep the on-device reader's libraries in their own chunk, loaded only when it's used
           manualChunks: (id) => (/node_modules\/(@paddleocr|@techstark|onnxruntime-web|clipper-lib)/.test(id) ? "ondevice" : undefined)
@@ -23,18 +25,15 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
-        // pay.html is copied as is from public/; give its preview tags an absolute base URL
+        // Link previews need an absolute image URL: fill %PUBLIC_URL% in pay.html's preview tags
         name: "pay-page-public-url",
-        apply: "build",
-        async writeBundle({ dir }) {
-          const { readFile, writeFile } = await import("node:fs/promises");
-          const file = `${dir}/pay.html`;
-          const base = VITE_PUBLIC_URL ? new URL("./", VITE_PUBLIC_URL).href : "";
-          await writeFile(file, (await readFile(file, "utf8")).replaceAll("%PUBLIC_URL%", base));
+        transformIndexHtml: {
+          order: "pre",
+          handler: (html) => html.replaceAll("%PUBLIC_URL%", VITE_PUBLIC_URL ? new URL("./", VITE_PUBLIC_URL).href : "")
         }
       },
       VitePWA({
-        registerType: "prompt", // src/UpdatePrompt.jsx asks before switching to a new version
+        registerType: "prompt", // src/components/UpdatePrompt.jsx asks before switching to a new version
         includeAssets: ["favicon.ico", "apple-touch-icon-180x180.png", "logo.svg", "pizza.svg"],
         manifest: {
           name: "SplitEasy",

@@ -7,7 +7,7 @@ const MONEY = /(?:^|\s)(-?\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?|-?\d+(?:\.\d{1,2})?
 const CURRENCY_TOKENS = [[/₹|\brs\.?\b|\binr\b/i, "₹"], [/\$|\busd\b/i, "$"], [/€|\beur\b/i, "€"], [/£|\bgbp\b/i, "£"]];
 
 // Row kinds by keyword (checked in this order)
-const IS_NOISE = /(?:^|[^a-z])(tin|contact|invoice|pax|print|powered|steward|items?\s*:|gstin|gst\s*no|fssai|cin|pan\b|phone|ph\.?|mob(ile)?|tel|email|www\.|\.com|date|time|bill\s*no|invoice|inv\s*no|order\s*no|kot|table|tbl|cashier|server|steward|waiter|captain|guests?|pax|covers?|thank|visit\s*again|welcome|hsn|sac|qty|rate|amount\s*\(|particulars|description|item\s*name|dine\s*in|take\s*away|takeaway|parcel\s*no|token)(?![a-z])|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{1,2}:\d{2}|[a-z0-9]*\d{5,}[a-z0-9]*/i;
+const IS_NOISE = /(?:^|[^a-z])(tin|contact|invoice|pax|print|powered|steward|items?\s*:|gstin|gst\s*no|fssai|cin|pan\b|phone|ph\.?|mob(ile)?|tel|email|www\.|\.com|date|time|bill\s*no|invoice|inv\s*no|order\s*no|kot|table|tbl|cashier|server|steward|waiter|captain|guests?|pax|covers?|thank|visit\s*again|welcome|hsn|sac|qty|rate|amount\s*\(|particulars|description|item\s*name|dine\s*in|take\s*away|takeaway|parcel\s*no|token)(?![a-z])|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}:\d{2}|[a-z0-9]*\d{5,}[a-z0-9]*/i;
 const IS_SUBTOTAL = /\b(sub\s*-?\s*total|food\s*total|item\s*total)\b/i;
 const IS_TOTAL = /\b(grand\s*total|g?ross\s*(amount|amt|total)|gross|net\s*(amount|amt|total|payable)|total\s*(amount|amt|payable|due)?|amount\s*payable|bill\s*amount|to\s*pay|balance\s*due)\b|^\s*amount\s*$/i;
 // Also when the edge of the paper cut off the "R" and OCR guessed the rest ("ound off", "pund off")

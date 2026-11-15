@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Your share of the bill</title>
+  <script>
+    // Same theme as the app (saved in its settings)
+    try {
+      var t = (JSON.parse(localStorage.getItem("spliteasy:v1")) || {}).theme;
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  </script>
+  <!-- Link preview card in chat apps. %PUBLIC_URL% is filled in at build time (vite.config.js) because
+       crawlers need an absolute image URL. The split itself is in the #hash, which crawlers never see. -->
+  <meta property="og:site_name" content="SplitEasy" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Your share of the bill" />
+  <meta property="og:description" content="See the full bill and pay" />
+  <meta property="og:image" content="%PUBLIC_URL%og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <style>
+    :root { --bg: #f3f4f6; --card: #fff; --text: #111; --muted: #6b7280; --accent: #6366f1; --line: #e5e7eb; }
+    /* Dark when the system asks (unless light was picked in the app), or when dark was picked */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --bg: #111318; --card: #1c1f26; --text: #f3f4f6; --muted: #9ca3af; --line: #2d313a; }
+    }
+    :root[data-theme="dark"] { --bg: #111318; --card: #1c1f26; --text: #f3f4f6; --muted: #9ca3af; --line: #2d313a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 0 16px 16px;
+      background: var(--bg); color: var(--text); font-family: -apple-system, "Inter", system-ui, sans-serif; }
+    .card { width: 100%; max-width: 380px; background: var(--card); border-radius: 20px; padding: 28px 24px; text-align: center;
+      box-shadow: 0 4px 32px #0001; }
+    /* One heavy element (the amount): context above it, a qualifier below */
+    .label { font-size: 16px; font-weight: 600; }
+    .note { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 2px; } /* the bill's description, under its name */
+    .note:empty { display: none; }
+    .to:empty { margin-bottom: 14px; }
+    /* Share view: the bill on top, then a divider, then whose share and the amount */
+    .sharehead { margin: 16px -24px 0; padding-top: 16px; border-top: 1px solid var(--line); font-size: 11px; font-weight: 700;
+      letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+    .amount { font-size: 40px; font-weight: 800; margin: 4px 0 2px; letter-spacing: -.5px; }
+    .to { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 20px; }
+    .pay { display: block; background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; font-size: 16px;
+      border-radius: 12px; padding: 14px; }
+    .id { margin-top: 12px; font-size: 13px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; }
+    .id code { font-size: 13px; color: var(--text); word-break: break-all; }
+    .copy { border: none; padding: 4px; color: var(--accent); display: inline-flex; border-radius: 6px; }
+    button { font: inherit; background: none; border: 1.5px solid var(--line); color: var(--text); border-radius: 10px; padding: 8px 14px; cursor: pointer; }
+    .error { color: #ef4444; }
+    .hint { color: var(--muted); font-size: 13px; margin: 0; }
+    .gpay { background: #1a73e8; margin-bottom: 10px; }
+    .payrow { display: flex; gap: 8px; }
+    .payrow .pay { flex: 1; }
+    .qrbtn { flex: 0 0 50px; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 12px; color: var(--accent); }
+    .sheet-back { position: fixed; inset: 0; z-index: 50; background: #0008; display: flex; align-items: flex-end; justify-content: center; animation: fade .18s ease-out; }
+    .sheet { width: 100%; max-width: 480px; background: var(--card); border-radius: 18px 18px 0 0; padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); text-align: center;
+      animation: up .28s cubic-bezier(.2, .8, .2, 1); }
+    /* The full bill sheet is the receipt itself */
+    .sheet.tall { position: relative; max-height: 90vh; text-align: left; display: flex; flex-direction: column; overflow: hidden; }
+    .sheet.tall #billbody { display: flex; flex-direction: column; min-height: 0; }
+    .sheet .receipt { display: flex; flex-direction: column; min-height: 0; }
+    .sheet .r-scroll { overflow-y: auto; min-height: 0; margin: 0 -16px; padding: 0 16px; overscroll-behavior: contain; }
+    .sheet .receipt { background: none; box-shadow: none; padding: 6px 4px 0; margin: 0; animation: none; }
+    .sheet .receipt::after { display: none; }
+    .x.corner { position: absolute; top: 14px; right: 12px; z-index: 2; } /* above the receipt, which is positioned too */
+    .sheet-head { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 17px; margin-bottom: 12px; }
+    .x { border: none; padding: 4px; font-size: 24px; line-height: 1; color: var(--muted); }
+    .qr-amount { font-size: 32px; font-weight: 800; }
+    .qr-to { font-size: 13px; color: var(--muted); margin: 4px 0 16px; }
+    .qr svg { display: block; margin: 0 auto 4px; width: 240px; height: 240px; background: #fff; border-radius: 12px; }
+    @keyframes up { from { transform: translateY(32px); opacity: 0; } }
+    /* Wide screens: sheets become centred modals */
+    @media (min-width: 640px) {
+      .sheet-back { align-items: center; padding: 24px; }
+      .sheet { max-width: 440px; border-radius: 18px; padding: 22px 20px; box-shadow: 0 16px 48px #0004; animation: pop .2s cubic-bezier(.2, .8, .2, 1); }
+      .sheet.tall { max-height: 85vh; }
+    }
+    @keyframes pop { from { transform: scale(.96); opacity: 0; } }
+    /* App header, as in SplitEasy: logo and name (opens the app), and a link to saved requests */
+    .top { width: 100%; max-width: 380px; display: flex; align-items: center; justify-content: space-between;
+      padding: calc(14px + env(safe-area-inset-top)) 2px 12px; } /* same width as the card, so their edges line up */
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; color: var(--text); text-decoration: none; }
+    .brand img { width: 28px; height: 28px; }
+    .icons { display: flex; gap: 2px; }
+    .top .icon { display: flex; padding: 6px; border: none; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+    /* Centred vertically: auto margins above the card and below the content (the full bill opens in a sheet, so nothing shifts) */
+    .card { margin-top: auto; }
+    .end { margin-top: auto; padding-top: 16px; }
+    .icon .sun { display: none; }
+    :root[data-theme="dark"] .icon .sun { display: inline; }
+    :root[data-theme="dark"] .icon .moon { display: none; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]) .icon .sun { display: inline; }
+      :root:not([data-theme]) .icon .moon { display: none; }
+    }
+    .mark { width: 100%; margin-top: 10px; font-weight: 600; font-size: 14px; }
+    .paid-note { margin-top: 4px; font-size: 14px; font-weight: 600; color: #16a34a; }
+    .paid-note button { border: none; padding: 0 0 0 6px; font-size: 13px; font-weight: 500; color: var(--muted); text-decoration: underline; }
+    .hint { margin-top: 4px; }
+    /* The reader's own items, receipt style, between the amount and the pay button */
+    .mine { margin: -6px 0 20px; padding: 10px 0 2px; border-top: 1.5px dashed var(--line); text-align: left; }
+    .mine .pline { font-size: 13px; padding: 3px 0; }
+    .actions { display: flex; justify-content: center; margin: 20px -24px -8px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .actions:not(:has(.act:not([hidden]))) { display: none; }
+    .act { border: none; padding: 4px 14px; font-weight: 600; font-size: 14px; color: var(--accent); }
+    .act:not([hidden]) + .act:not([hidden]) { border-left: 1px solid var(--line); border-radius: 0; }
+    .viewas { margin-top: 22px; font-size: 12px; color: var(--muted); }
+    .viewas .linkish { display: inline; margin: 0; font-size: 12px; }
+    .linkish { display: block; margin: 14px auto 0; border: none; padding: 0; font-size: 13px; color: var(--muted); text-decoration: underline; }
+    /* "Which one are you?": one row per person, like the cards below */
+    .pick { text-align: left; margin-top: 4px; }
+    .pick-label { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; text-align: center; }
+    .pick-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; font-size: 15px; font-weight: 600; text-align: left; }
+    .pick-row + .pick-row { margin-top: 8px; }
+    .pick-row .avatar { width: 32px; height: 32px; font-size: 13px; }
+    .pick-row .amt { margin-left: auto; font-variant-numeric: tabular-nums; }
+    .pick-name { display: flex; align-items: center; gap: 6px; }
+    /* Full bill: one receipt, person by person */
+    .people { width: 100%; max-width: 380px; margin-top: 16px; }
+    .people-head:empty { display: none; }
+    .receipt { position: relative; background: var(--card); border-radius: 14px 14px 0 0; padding: 22px 20px 14px; margin-bottom: 12px;
+      box-shadow: 0 4px 24px #0001; animation: fade .2s ease-out; }
+    /* torn-paper edge along the bottom */
+    .receipt::after { content: ""; position: absolute; left: 0; right: 0; bottom: -10px; height: 10px;
+      background: linear-gradient(-45deg, transparent 7px, var(--card) 0) 0 0 / 14px 10px repeat-x, linear-gradient(45deg, transparent 7px, var(--card) 0) 0 0 / 14px 10px repeat-x; }
+    .r-title { font-weight: 800; font-size: 18px; text-align: center; }
+    .r-tabs { position: relative; display: flex; background: var(--bg); border-radius: 10px; padding: 3px; margin: 12px 0 4px; }
+    .r-pill { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); background: var(--card); border-radius: 8px; box-shadow: 0 1px 3px #0001; }
+    .r-tabs button { position: relative; flex: 1; border: none; border-radius: 8px; padding: 6px 0; font-size: 13px; font-weight: 600; color: var(--muted); transition: color .2s; }
+    .r-tabs button.on { color: var(--accent); }
+    .r-scroll { touch-action: pan-y; }
+    @keyframes tab-r { from { opacity: 0; transform: translateX(30%); } }
+    @keyframes tab-l { from { opacity: 0; transform: translateX(-30%); } }
+    @media (prefers-reduced-motion: reduce) { .r-body { animation: none !important; } }
+    .r-body > :first-child { border-top: 1.5px dashed var(--line); margin-top: 10px; }
+    .bline { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; font-size: 14px; padding: 5px 0; }
+    .bline:first-child { padding-top: 12px; }
+    .bline.muted { color: var(--muted); font-size: 13px; padding: 4px 0; }
+    .bamt { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+    .bline.muted .bamt { font-weight: 400; }
+    .r-rule { border-top: 1.5px dashed var(--line); margin: 6px 0 4px; }
+    .r-sub { font-size: 12px; color: var(--muted); text-align: center; margin: 2px 0 6px; }
+    .r-person { padding: 12px 0 8px; border-top: 1.5px dashed var(--line); }
+    .r-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+    .r-name { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; min-width: 0; }
+    .r-name .avatar { width: 24px; height: 24px; font-size: 11px; }
+    .r-amt { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .r-person .pline { padding-left: 32px; }
+    .r-person.me .r-name { color: var(--accent); }
+    .tag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 1px 6px; }
+    .tag.ok { color: #16a34a; }
+    .tag.you { color: var(--accent); }
+    .r-total { display: flex; justify-content: space-between; font-weight: 800; font-size: 16px; padding-top: 12px; border-top: 1.5px solid var(--text); font-variant-numeric: tabular-nums; }
+    .avatar { width: 34px; height: 34px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .pline { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); padding: 3px 0; }
+    .pline span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    @keyframes fade { from { opacity: 0; } }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./"><img src="pizza.svg" alt="" />SplitEasy</a>
+    <div class="icons">
+      <button class="icon" id="theme" type="button" aria-label="Switch theme" title="Switch theme">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path class="moon" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          <g class="sun"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></g>
+        </svg>
+      </button>
+      <a class="icon" href="./?tab=requests#/history" aria-label="Saved requests" title="Saved requests">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+      </a>
+      <a class="icon" href="./#/settings" aria-label="Settings" title="Settings">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+      </a>
+    </div>
+  </header>
+  <main class="card" id="card">
+    <div class="label" id="label">Payment request</div>
+    <div class="note" id="note"></div>
+    <div class="sharehead" id="sharehead" hidden></div>
+    <div class="amount" id="amount"></div>
+    <div class="to" id="to"></div>
+    <div class="mine" id="mine" hidden></div>
+    <div class="pick" id="pick" hidden></div>
+    <a class="pay gpay" id="gpay" hidden>Pay with Google Pay</a>
+    <div class="payrow">
+      <a class="pay" id="pay" hidden>Pay with any UPI app</a>
+      <button class="qrbtn" id="qrbtn" type="button" hidden aria-label="Show QR code to scan and pay" title="Show QR to scan and pay">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3" /></svg>
+      </button>
+    </div>
+    <div class="id" id="upibox" hidden>
+      or pay to <code id="upi"></code>
+      <button class="copy" id="copy" type="button" aria-label="Copy UPI ID" title="Copy UPI ID">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+      </button>
+    </div>
+    <p class="hint" id="hint" hidden></p>
+    <div class="paid-note" id="paidnote" hidden></div>
+    <!-- Secondary actions as quiet links in one row -->
+    <div class="actions">
+      <button class="act" id="mark" type="button" hidden>Mark as paid</button>
+      <button class="act" id="full" type="button" hidden>View full bill</button>
+    </div>
+    <div class="viewas" id="viewas" hidden></div>
+  </main>
+  <section class="people" id="people" hidden>
+    <div class="people-head" id="peoplehead"></div>
+    <div id="cards"></div>
+  </section>
+  <div class="end"></div>
+  <!-- Full bill from your share: the receipt, person by person, in a sheet so the pay card stays put -->
+  <div class="sheet-back" id="billsheet" hidden>
+    <div class="sheet tall" role="dialog" aria-modal="true" aria-label="Full bill">
+      <button class="x corner" data-close type="button" aria-label="Close">&times;</button>
+      <div id="billbody"></div>
+    </div>
+  </div>
+  <!-- Scan to pay: the same UPI payment as a QR code, for paying from another phone -->
+  <div class="sheet-back" id="qrsheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="Scan to pay">
+      <div class="sheet-head"><span>Scan to pay</span><button class="x" data-close type="button" aria-label="Close">&times;</button></div>
+      <div class="qr-amount" id="qramount"></div>
+      <div class="qr-to" id="qrto"></div>
+      <div class="qr" id="qr"></div>
+      <div class="qr-to">Works with any UPI app.</div>
+    </div>
+  </div>
+  <script type="module" src="/src/pay/main.js"></script>
+</body>
+</html>

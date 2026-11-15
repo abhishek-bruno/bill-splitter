@@ -15,6 +15,9 @@ You need Node.js 22.
 ```sh
 npm install
 npm run dev       # dev server at http://localhost:5173 (service worker disabled)
+npm test          # unit tests (Vitest); npm run test:watch while you work
+npm run lint      # ESLint: undefined names, unused code, hook mistakes
+npm run check     # lint + tests + build, the same checks the deploy runs
 npm run build     # production build to dist/, with the service worker
 npm run preview   # serve dist/ to test the installed-app behaviour
 npm run icons     # regenerate the app icons from public/logo.svg
@@ -30,22 +33,50 @@ Without it, links are only created when the app is served over HTTPS, and they p
 
 ## Project layout
 
+```
+index.html, pay.html        the two pages: the app, and the page friends open from a payment link
+src/
+  main.jsx                  starts the app
+  App.jsx                   app shell: state, routing, header, which screen shows
+  screens/                  one file per screen
+  components/               shared UI: sheets, dialogs, footers, icons, styles
+  hooks/                    shared React hooks (theme, swipeable tabs)
+  lib/                      plain logic, no UI (most of it has tests)
+  scan/                     reading bill photos (cloud and on device)
+  pay/main.js               the pay page's script
+  index.css                 colour tokens (light and dark), animations
+```
+
 | Path | What it does |
 |---|---|
-| `src/BillSplitter.jsx` | The app: screens, routing, state, sheets and dialogs |
-| `src/payment.js` | Share messages, pay links (packing a split into a URL), UPI links |
-| `src/vision.js` | Bill scanning: cloud providers, the on-device route, and cleaning up results |
-| `src/local/models.js` | On Device AI engines: consented download, cache checks, removal |
-| `src/local/basicScan.js` | Runs PaddleOCR in a web worker on a scaled-down photo |
-| `src/local/parseReceipt.js` | Rule-based parser: OCR text to items, charges, round-off and total |
-| `src/secureStore.js` | Encrypts API keys in IndexedDB with a non-extractable key |
-| `src/GPay.jsx` | Shared bottom sheet, and the "Scan to pay" UPI QR sheet |
-| `src/InstallPrompt.jsx` | Install banner and the Install section in Settings |
-| `src/UpdatePrompt.jsx` | "Update available" dialog for new versions |
-| `src/index.css` | Colour tokens (light and dark), animations, small layout helpers |
-| `public/pay.html` | The page friends open from a payment link. Standalone, no build step |
-| `vite.config.js` | Build, PWA manifest and service worker caching rules |
-| `.github/workflows/deploy.yml` | Builds and deploys to GitHub Pages on every push to `main` |
+| `src/App.jsx` | Holds the split in progress and history, syncs the URL, shows the header and the current screen |
+| `src/screens/HomeHero.jsx` | Home screen intro and the "Why SplitEasy" sheet |
+| `src/screens/BillStep.jsx` | Step 1: home buttons, scanning a photo, and the bill form |
+| `src/screens/ScanSetup.jsx` | "How to read bills" sheet: On Device AI downloads and Cloud AI keys |
+| `src/screens/PeopleStep.jsx` | Step 2: who is splitting, with saved people |
+| `src/screens/SplitStep.jsx` | Step 3: who had each item, split by quantity, how charges are shared |
+| `src/screens/SettleStep.jsx` | The result: each person's share, sharing, QR, marking paid |
+| `src/screens/History.jsx` | Saved splits and saved payment requests |
+| `src/screens/Settings.jsx` | UPI details, bill scanning, saved people, theme, erasing data |
+| `src/components/Sheet.jsx` | Bottom sheet (a modal on wide screens); Back closes it |
+| `src/components/QrSheet.jsx` | "Scan to pay" UPI QR |
+| `src/components/styles.js` | Shared inline styles (inputs, buttons, cards) |
+| `src/lib/totals.js` | **Who owes what.** The only place shares are calculated |
+| `src/lib/splitLink.js` | Packs a split into a payment link and unpacks it again |
+| `src/lib/payment.js` | Share messages, pay page links, UPI links, share or copy |
+| `src/lib/requests.js` | Payment links opened on this device (written by the pay page, listed in History) |
+| `src/lib/storage.js` | localStorage hooks and keys for the split, history and preferences |
+| `src/lib/routes.js` | Hash routes for each screen |
+| `src/lib/scanSettings.js` | Which reader is in use, saved Cloud AI keys, the last scanned photo |
+| `src/lib/secureStore.js` | Encrypts API keys in IndexedDB with a non-extractable key |
+| `src/scan/vision.js` | Bill scanning: cloud providers, the on-device route, and cleaning up results |
+| `src/scan/models.js` | On Device AI engines: consented download, cache checks, removal |
+| `src/scan/basicScan.js` | Runs PaddleOCR in a web worker on a scaled-down photo |
+| `src/scan/parseReceipt.js` | Rule-based parser: OCR text to items, charges, round-off and total |
+| `src/pay/main.js` | The pay page: unpacks the link, shows the share, pay buttons, full bill, Mark as paid |
+| `vite.config.js` | Build (two pages), PWA manifest and service worker caching rules |
+| `eslint.config.js` | Lint rules |
+| `.github/workflows/deploy.yml` | Lints, tests, builds and deploys to GitHub Pages on every push to `main` |
 
 ## Architecture
 
@@ -84,7 +115,7 @@ The app is four steps in one component tree, with hash routes so the browser's B
 
 Bottom sheets add their own history entry, so Back closes the sheet rather than leaving the screen.
 
-`computeTotals` in `BillSplitter.jsx` is the one place shares are calculated: each item is divided among the people on it (by weight when shares are uneven), and shared charges plus any round-off are divided equally or in proportion to each person's items.
+`src/lib/totals.js` is the one place shares are calculated: each item is divided among the people on it (by quantity when it was split that way), and shared charges plus any round-off are divided equally or in proportion to each person's items. The app's screens, the share messages and the pay page all use it, so they always agree.
 
 ### Storage
 
@@ -121,7 +152,7 @@ flowchart TD
 
 A link looks like `pay.html#<data>`. The whole split is packed into the part after `#`, so it never reaches a server: browsers don't send it, and link previews only see the static card in `pay.html`.
 
-The data is base64url of text fields separated by control characters (format version `2`). It holds the bill name, currency, payee, UPI ID, whose share it is (or `-` for a group link), names, items with bitmasks of who shared them, charges, who has paid, and the charge-split and round-off choices. `packSplit` in `payment.js` writes it, `unpack` in `pay.html` reads it, and both must recompute shares the same way as `computeTotals`. If you change the format, bump the version and keep old links working.
+The data is base64url of text fields separated by control characters (format version `2`). It holds the bill name, currency, payee, UPI ID, whose share it is (or `-` for a group link), names, items with bitmasks of who shared them, charges, who has paid, and the charge-split and round-off choices. `src/lib/splitLink.js` writes it (`packSplit`) and reads it back into the app's own shapes (`unpackSplit`), so the pay page works out shares with the same `totals.js` as the app. Tests pin the exact link strings older versions produced: if they fail, links people already shared would break. To change the format, add a new version and keep reading the old one.
 
 ### Installing and updating
 
@@ -133,13 +164,15 @@ The data is base64url of text fields separated by control characters (format ver
 - **Phones first:** check every change at 390 × 844, and at 320 × 568 for small screens. Main actions sit at the bottom, within reach of a thumb.
 - **Motion:** keep animations short and subtle, and respect `prefers-reduced-motion`.
 - **Dependencies:** the app is small on purpose. Talk it through in an issue before adding one.
-- **Testing:** there is no automated test suite yet. Run the flow you changed in the browser: enter or scan a bill, split it, settle, and open the pay link. For parser changes, test against several receipts and confirm the computed total still matches the printed one.
+- **Where code goes:** screens in `src/screens/`, reusable UI in `src/components/`, and anything that isn't UI in `src/lib/` (or `src/scan/` for bill reading), where it can be tested. Keep money math in `totals.js`.
+- **Tests:** `npm test` runs the unit tests next to the code (`*.test.js`). Add or update tests when you change totals, payment links, routes, saved requests or the receipt parser. Parser tests use made-up receipts in `src/scan/__fixtures__/`.
+- **Check it in the browser too:** run the flow you changed: enter or scan a bill, split it, settle, and open the pay link (personal and group).
 - **Privacy:** never commit real bill photos, names or UPI IDs. Use made-up receipts and placeholder IDs such as `name@example`.
 
 ## Shipping changes
 
 1. Fork the repo and create a branch.
-2. Make your change and run `npm run build` to make sure it builds.
+2. Make your change and run `npm run check` (lint, tests and build).
 3. Open a pull request that explains what changed and why. Include before and after screenshots for anything visual.
 
-Every push to `main` builds and deploys to GitHub Pages automatically, so `main` must always be in a working state. The public URL used in payment links comes from the `VITE_PUBLIC_URL` repository variable (Settings, Secrets and variables, Actions, Variables).
+Every push to `main` is linted, tested, built and deployed to GitHub Pages automatically. A failing check stops the deploy, but keep `main` in a working state anyway. The public URL used in payment links comes from the `VITE_PUBLIC_URL` repository variable (Settings, Secrets and variables, Actions, Variables).
